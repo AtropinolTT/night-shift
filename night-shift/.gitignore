@@ -1,0 +1,16 @@
+# Runtime state (auto-managed, user-specific)
+state.json
+
+# User-specific config (template is config.example.json)
+config.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
