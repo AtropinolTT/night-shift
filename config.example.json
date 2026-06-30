@@ -1,0 +1,22 @@
+{
+  "autonomy": "L2",
+  "budget": {
+    "daily_max_tokens": 5000000,
+    "soft_cap": false
+  },
+  "thresholds": {
+    "peak_dispatch_max_tokens": 200000,
+    "peak_force_flash": true,
+    "retry_max": 3,
+    "escalate_after_failures": 3
+  },
+  "projects": {
+    "discover": true,
+    "paths": [],
+    "blacklist": []
+  },
+  "schedule": {
+    "off_peak_wakeup": "18:05",
+    "inter_job_pause_minutes": 5
+  }
+}

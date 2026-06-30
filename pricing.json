@@ -1,0 +1,41 @@
+{
+  "timezone": "Asia/Shanghai",
+  "peak_windows": [
+    {
+      "start": "09:00",
+      "end": "12:00"
+    },
+    {
+      "start": "14:00",
+      "end": "18:00"
+    }
+  ],
+  "models": {
+    "pro": {
+      "name": "DeepSeek-V4-Pro",
+      "off_peak": {
+        "input_cache_hit": 0.025,
+        "input_cache_miss": 3,
+        "output": 6
+      },
+      "peak": {
+        "input_cache_hit": 0.05,
+        "input_cache_miss": 6,
+        "output": 12
+      }
+    },
+    "flash": {
+      "name": "DeepSeek-V4-Flash",
+      "off_peak": {
+        "input_cache_hit": 0.02,
+        "input_cache_miss": 1,
+        "output": 2
+      },
+      "peak": {
+        "input_cache_hit": 0.04,
+        "input_cache_miss": 2,
+        "output": 4
+      }
+    }
+  }
+}
