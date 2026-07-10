@@ -1,0 +1,662 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import type { Hooks, PluginInput, PluginOptions } from "@opencode-ai/plugin";
+import { tool } from "@opencode-ai/plugin";
+import { MCPRelay } from "./mcp-relay.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const COMPANION_SCRIPT = path.resolve(__dirname, "..", "companion", "server.py");
+
+// ── Pre-filter: read-only tools that skip the companion entirely ──────
+// Mirrors classifier.py READ_ONLY_TOOLS to avoid ~1586ms relay round-trip.
+const READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
+  "Read",
+  "Glob",
+  "Grep",
+  "lsp_diagnostics",
+  "lsp_find_references",
+  "lsp_goto_definition",
+  "lsp_symbols",
+  "lsp_status",
+  "lsp_prepare_rename",
+]);
+
+// ── Types ──────────────────────────────────────────────────────────────
+
+interface ClassifierResult {
+  decision: "ALLOW" | "DENY" | "ASK_USER";
+  reason: string;
+}
+
+/** Shape returned by the companion's fusion_dispatch_tool MCP tool. */
+interface FusionResult {
+  prompt: string;
+  model_responses: Array<{
+    model: string;
+    response: string;
+    cost: number;
+    input_tokens: number;
+    output_tokens: number;
+    wall_time_ms: number;
+    timed_out: boolean;
+    error: string | null;
+  }>;
+  fused_answer: string;
+  cost: number;
+  wall_time_ms: number;
+  timed_out_models: string[];
+  label: string;
+}
+
+/** Shape returned by the companion's goal_loop MCP tool. */
+interface GoalLoopResult {
+  goal: string;
+  status: string;
+  turns_used: number;
+  total_cost: number;
+  wall_time_ms: number;
+  output_summary: string;
+  termination_reason: string;
+  turns: Array<{
+    turn_index: number;
+    tool_name: string;
+    tool_args: Record<string, unknown>;
+    decision: string;
+    reason: string;
+    estimated_cost: number;
+    cumulative_cost: number;
+  }>;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
+
+/** Extract file paths from tool arguments for classifier context. */
+function extractFilePaths(
+  toolName: string,
+  args: Record<string, unknown> | undefined,
+): string[] {
+  if (!args) return [];
+
+  const paths: string[] = [];
+
+  // Single filePath arg — most tools (Read, Write, Edit, lsp_*)
+  if (typeof args.filePath === "string" && args.filePath.trim()) {
+    paths.push(args.filePath);
+  }
+
+  // Bash command — extract obvious file paths (best-effort, not exhaustive)
+  if (toolName === "Bash" && typeof args.command === "string") {
+    const cmd = args.command;
+    // Match quoted or bare paths: /path/to/file, "./file", "~/file"
+    const pathRe = /(["']?)(\/[^\s"']+|\.\/[^\s"']+|~\/[^\s"']+)\1/g;
+    let m: RegExpExecArray | null;
+    while ((m = pathRe.exec(cmd)) !== null) {
+      if (paths.length >= 20) break;
+      paths.push(m[2]);
+    }
+  }
+
+  // Multiple filePaths arg (rare)
+  if (
+    Array.isArray(args.filePaths) &&
+    args.filePaths.every((p): p is string => typeof p === "string")
+  ) {
+    for (const p of args.filePaths) {
+      if (paths.length >= 20) break;
+      if (p.trim()) paths.push(p);
+    }
+  }
+
+  return paths;
+}
+
+/** Build a safe session context for the classifier (no tokens/secrets). */
+function buildSessionContext(evt: { sessionID: string }): Record<string, unknown> {
+  return { session_id: evt.sessionID };
+}
+
+// ── Fusion helpers ─────────────────────────────────────────────────────
+
+/** Parse the argument string from `/fusion [args]`. Strips surrounding quotes. */
+function parseFusionArgs(raw: string): string {
+  if (!raw) return "";
+  let s = raw.trim();
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s;
+}
+
+function formatUsage(): string {
+  return [
+    "╔══════════════════════════════════════════════════════════════╗",
+    "║  🧪  EXPERIMENTAL — Model Fusion (v1-alpha)                 ║",
+    "╚══════════════════════════════════════════════════════════════╝",
+    "",
+    "**Usage:** `/fusion \"your prompt here\"`",
+    "",
+    "Sends your prompt to 2-3 AI models in parallel and synthesizes a",
+    "fused answer. Default models: `deepseek-v4-pro` + `deepseek-v4-flash`.",
+    "Maximum 3 models. Cost ceiling: $0.50 per fusion.",
+    "",
+    "**Examples:**",
+    "```",
+    "/fusion \"write a hello world in python\"",
+    "/fusion \"explain monads in simple terms\"",
+    "```",
+  ].join("\n");
+}
+
+function formatFusionOutput(result: FusionResult): string {
+  const lines: string[] = [];
+
+  lines.push(
+    "╔══════════════════════════════════════════════════════════════╗",
+    "║  🧪  EXPERIMENTAL — Model Fusion (v1-alpha)                 ║",
+    "║  Results are NOT verified. Review before relying on output.  ║",
+    "╚══════════════════════════════════════════════════════════════╝",
+    "",
+    `**Prompt:** ${result.prompt}`,
+    `**Wall time:** ${result.wall_time_ms}ms  |  **Total cost:** $${result.cost.toFixed(5)}`,
+    "",
+  );
+
+  // Per-model responses (collapsible)
+  if (result.model_responses.length > 0) {
+    lines.push("## Per-Model Responses", "");
+    for (const mr of result.model_responses) {
+      const status = mr.timed_out
+        ? "⏱ TIMED OUT"
+        : mr.error
+          ? "⚠️ ERROR"
+          : "✅";
+      lines.push(
+        `<details>`,
+        `<summary>${status} **${mr.model}** — $${mr.cost.toFixed(5)} | ${mr.wall_time_ms}ms | ${mr.input_tokens}+${mr.output_tokens} tokens</summary>`,
+        "",
+      );
+      if (mr.error) {
+        lines.push(`> **Error:** ${mr.error}`, "");
+      }
+      if (mr.response) {
+        lines.push(mr.response, "");
+      }
+      lines.push("</details>", "");
+    }
+  }
+
+  // Timed-out models
+  if (result.timed_out_models.length > 0) {
+    lines.push(
+      `⚠️ **Timed-out models:** ${result.timed_out_models.join(", ")}`,
+      "",
+    );
+  }
+
+  // Fused answer (prominent)
+  lines.push(
+    "---",
+    "",
+    "## 🧬 Fused Answer",
+    "",
+    result.fused_answer,
+    "",
+    "---",
+    "",
+  );
+
+  // Cost breakdown
+  lines.push("## 💰 Cost Breakdown", "");
+  for (const mr of result.model_responses) {
+    lines.push(
+      `- **${mr.model}:** $${mr.cost.toFixed(5)} (${mr.input_tokens}+${mr.output_tokens} tokens, ${mr.wall_time_ms}ms)`,
+    );
+  }
+  lines.push(`- **Total:** $${result.cost.toFixed(5)}`, "");
+
+  lines.push(`*Cost ceiling: $0.50 per fusion*`);
+
+  return lines.join("\n");
+}
+
+// ── Goal Loop helpers ──────────────────────────────────────────────────
+
+function formatGoalUsage(): string {
+  return [
+    "╔══════════════════════════════════════════════════════════════╗",
+    "║  🎯  Goal Loop — Classifier-Gated Agent Simulation          ║",
+    "╚══════════════════════════════════════════════════════════════╝",
+    "",
+    "**Usage:** `/goal \"your goal description\"`",
+    "",
+    "Runs a simulated agent loop through the security classifier.",
+    "Each action is classified as ALLOW/DENY/ASK_USER. Terminates on:",
+    "- Goal achieved (task_done action)",
+    "- Max turns reached (default: 10, max: 50)",
+    "- Cost ceiling exceeded (default: $1.00)",
+    "- 3 consecutive DENY decisions (blocked)",
+    "",
+    "**Examples:**",
+    "```",
+    '/goal "Fix all lint errors"',
+    '/goal "Add dark mode support"',
+    "```",
+  ].join("\n");
+}
+
+function formatGoalOutput(result: GoalLoopResult): string {
+  const lines: string[] = [];
+
+  lines.push(
+    "╔══════════════════════════════════════════════════════════════╗",
+    "║  🎯  Goal Loop — Classifier-Gated Agent Simulation          ║",
+    "╚══════════════════════════════════════════════════════════════╝",
+    "",
+    `**Goal:** ${result.goal}`,
+    "",
+  );
+
+  const lastAction =
+    result.turns.length > 0
+      ? result.turns[result.turns.length - 1].tool_name
+      : "none";
+  const decisions =
+    result.turns.map((t) => t.decision).join(", ") || "none";
+
+  lines.push(
+    "## 📊 Progress",
+    "",
+    `- **Turns used:** ${result.turns_used}`,
+    `- **Last action:** ${lastAction}`,
+    `- **Classifier decisions:** ${decisions}`,
+    "",
+  );
+
+  if (result.turns.length > 0) {
+    lines.push("### Turn-by-Turn", "");
+    lines.push("| # | Action | Decision | Reason |");
+    lines.push("|---|--------|----------|--------|");
+    for (const t of result.turns) {
+      const reason =
+        t.reason.length > 60 ? t.reason.slice(0, 57) + "..." : t.reason;
+      lines.push(
+        `| ${t.turn_index + 1} | ${t.tool_name} | ${t.decision} | ${reason} |`,
+      );
+    }
+    lines.push("");
+  }
+
+  const statusIcon =
+    result.status === "goal_met"
+      ? "✅"
+      : result.status === "blocked"
+        ? "🚫"
+        : result.status === "cost_exceeded"
+          ? "💰"
+          : "⏱️";
+
+  lines.push(
+    "---",
+    "",
+    "## 📋 Summary",
+    "",
+    `- **Status:** ${statusIcon} ${result.status}`,
+    `- **Turns used:** ${result.turns_used}`,
+    `- **Total cost:** $${result.total_cost.toFixed(4)}`,
+    `- **Wall time:** ${result.wall_time_ms}ms`,
+    `- **Termination:** ${result.termination_reason}`,
+  );
+
+  return lines.join("\n");
+}
+
+// ── Plugin ─────────────────────────────────────────────────────────────
+
+export default async function bifrostPlugin(
+  pluginInput: PluginInput,
+  _options?: PluginOptions,
+): Promise<Hooks> {
+  const relay = new MCPRelay();
+  const { client } = pluginInput;
+
+  try {
+    await relay.connect("python3", COMPANION_SCRIPT);
+  } catch (err) {
+    console.warn("[bifrost] companion not available (non-fatal):", err);
+  }
+
+  return {
+    dispose: async () => {
+      await relay.disconnect();
+    },
+
+    event: async (evt) => {
+      try {
+        if (evt.event.type === "session.created") {
+          console.log("[bifrost] session created:", evt.event.properties.info);
+        }
+      } catch (err) {
+        console.warn("[bifrost] event hook error (non-fatal):", err);
+      }
+    },
+
+    "tool.execute.before": async (evt, output) => {
+      // ── Pre-filter: skip companion entirely for read-only tools ──────
+      if (READ_ONLY_TOOLS.has(evt.tool)) {
+        return; // ALLOW — tool executes normally, saves ~1586ms latency
+      }
+
+      try {
+        // ── Call companion classifier via async MCP relay ──────────────
+        const result = await relay.call<ClassifierResult>(
+          "classify_tool_call",
+          {
+            tool_name: evt.tool,
+            tool_args: (evt as any).args ?? {},
+            file_paths: extractFilePaths(evt.tool, (evt as any).args),
+            session_context: buildSessionContext(evt as any),
+          },
+          15_000, // generous timeout — classifier p95 is ~1586ms
+        );
+
+        // ── Handle classification decision ─────────────────────────────
+        switch (result.decision) {
+          case "ALLOW":
+            console.log(
+              `[bifrost] ALLOW ${evt.tool}: ${result.reason}`,
+            );
+            return; // tool executes normally
+
+          case "DENY":
+            console.warn(
+              `[bifrost] DENY ${evt.tool}: ${result.reason}`,
+            );
+            throw new Error(
+              `[bifrost] Tool execution blocked: ${evt.tool} — ${result.reason}`,
+            );
+
+          case "ASK_USER":
+          default:
+            // Unknown/invalid decision → safe fallback to ASK_USER
+            console.log(
+              `[bifrost] ASK_USER ${evt.tool}: ${result.reason}`,
+            );
+            (output as any).allow = false;
+            (output as any).reason =
+              result.reason ||
+              `[bifrost] User confirmation required for: ${evt.tool}`;
+            return;
+        }
+      } catch (err) {
+        // ── Relay error, timeout, or companion unreachable ─────────────
+        // Re-throw DENY errors so agent sees the blocking reason.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("[bifrost] Tool execution blocked:")) {
+          throw err; // propagate DENY errors
+        }
+
+        // All other errors (connection, timeout, unexpected) → ASK_USER
+        console.warn(
+          `[bifrost] classifier error for ${evt.tool}, defaulting to ASK_USER: ${msg}`,
+        );
+        (output as any).allow = false;
+        (output as any).reason =
+          `[bifrost] Classifier unavailable — user confirmation required for: ${evt.tool}`;
+      }
+    },
+
+    "permission.ask": async (_evt, output) => {
+      try {
+        output.status = "ask";
+      } catch (err) {
+        console.warn("[bifrost] permission.ask error (non-fatal):", err);
+      }
+    },
+
+    // ── fusion tool (AI-invokable, also backing /fusion slash command) ──
+    tool: {
+      fusion: tool({
+        description:
+          "EXPERIMENTAL — Model Fusion (v1-alpha). Dispatch a prompt to 2-3 AI models in parallel and synthesize a fused answer. User-invoked only via /fusion slash command.",
+        args: {
+          prompt: tool.schema
+            .string()
+            .describe("The prompt to send to all models"),
+          models: tool.schema
+            .array(tool.schema.string())
+            .optional()
+            .describe(
+              "Model IDs (max 3). Default: deepseek-v4-pro + deepseek-v4-flash",
+            ),
+          synthesis_model: tool.schema
+            .string()
+            .optional()
+            .describe(
+              "Model to use for synthesis. Default: deepseek-v4-pro",
+            ),
+          cost_ceiling: tool.schema
+            .number()
+            .optional()
+            .describe("Maximum USD cost. Default: $0.50"),
+        },
+        async execute(args, _context) {
+          if (!relay.connected) {
+            return "❌ Bifrost companion is not running. Start `bifrost-companion` to use `/fusion`.";
+          }
+          try {
+            const result = await relay.call<FusionResult>(
+              "fusion_dispatch_tool",
+              {
+                prompt: args.prompt,
+                models: args.models ?? undefined,
+                synthesis_model: args.synthesis_model ?? undefined,
+                cost_ceiling: args.cost_ceiling ?? 0.5,
+              },
+              120_000,
+            );
+            return formatFusionOutput(result);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            return `❌ /fusion failed: ${msg}`;
+          }
+        },
+      }),
+    },
+
+    "command.execute.before": async (input, output) => {
+      try {
+        // ── /fusion ────────────────────────────────────────────────────
+        if (input.command === "fusion") {
+          const rawArgs = (input.arguments ?? "").trim();
+          const prompt = parseFusionArgs(rawArgs);
+
+          if (!prompt) {
+            output.parts = [
+              { type: "text" as const, text: formatUsage() },
+            ] as never;
+            return;
+          }
+
+          if (!relay.connected) {
+            output.parts = [
+              {
+                type: "text" as const,
+                text: "❌ Bifrost companion is not running. Start `bifrost-companion` to use `/fusion`.",
+              },
+            ] as never;
+            return;
+          }
+
+          try {
+            const result = await relay.call<FusionResult>(
+              "fusion_dispatch_tool",
+              { prompt, cost_ceiling: 0.5 },
+              120_000,
+            );
+            output.parts = [
+              {
+                type: "text" as const,
+                text: formatFusionOutput(result),
+              },
+            ] as never;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            output.parts = [
+              {
+                type: "text" as const,
+                text: `❌ /fusion failed: ${msg}`,
+              },
+            ] as never;
+          }
+          return;
+        }
+
+        // ── /goal ────────────────────────────────────────────────────
+        if (input.command === "goal") {
+          const rawArgs = (input.arguments ?? "").trim();
+          const goal = parseFusionArgs(rawArgs);
+
+          if (!goal) {
+            output.parts = [
+              { type: "text" as const, text: formatGoalUsage() },
+            ] as never;
+            return;
+          }
+
+          if (!relay.connected) {
+            output.parts = [
+              {
+                type: "text" as const,
+                text: "❌ Bifrost companion is not running. Start `bifrost-companion` to use `/goal`.",
+              },
+            ] as never;
+            return;
+          }
+
+          try {
+            const result = await relay.call<GoalLoopResult>(
+              "goal_loop",
+              {
+                goal,
+                actions: [
+                  {
+                    tool_name: "Read",
+                    tool_args: {},
+                    estimated_cost: 0.01,
+                  },
+                ],
+              },
+              30_000,
+            );
+            output.parts = [
+              {
+                type: "text" as const,
+                text: formatGoalOutput(result),
+              },
+            ] as never;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            output.parts = [
+              {
+                type: "text" as const,
+                text: `❌ /goal failed: ${msg}`,
+              },
+            ] as never;
+          }
+          return;
+        }
+
+        // ── /audit-permissions ─────────────────────────────────────────
+        if (input.command !== "audit-permissions") return;
+
+        const arg = (input.arguments ?? "").trim();
+        const sourcePath = arg || "~/.claude/settings.json";
+
+        if (!relay.connected) {
+          output.parts = [{
+            type: "text",
+            text: "⚠️  Bifrost companion is not running. Start the companion server to use /audit-permissions.",
+          }] as never;
+          return;
+        }
+
+        const result = await relay.call<string>("config_migrate", {
+          source_path: sourcePath,
+        });
+
+        const isToolError =
+          result.startsWith("No Claude Code config found at") ||
+          result.startsWith("Error reading") ||
+          result.startsWith("Error parsing");
+
+        if (isToolError) {
+          output.parts = [{ type: "text", text: `❌ ${result}` }] as never;
+          return;
+        }
+
+        const formatted = [
+          "╔══════════════════════════════════════════════════════════════╗",
+          "║  ⚠️  DO NOT AUTO-APPLY — REVIEW MANUALLY                   ║",
+          "║  This is a READ-ONLY audit. Copy sections you need.         ║",
+          "╚══════════════════════════════════════════════════════════════╝",
+          "",
+          result,
+          "",
+          "──────────────────────────────────────────────────────────────",
+          "⚠️  REMINDER: Review each section manually before applying.",
+          "   This tool does NOT modify any files.",
+        ].join("\n");
+
+        output.parts = [{ type: "text", text: formatted }] as never;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        output.parts = [{
+          type: "text",
+          text: `❌ /audit-permissions failed: ${msg}`,
+        }] as never;
+      }
+    },
+
+    "experimental.session.compacting": async (evt, output) => {
+      try {
+        console.log("[bifrost] session compacting:", evt.sessionID);
+        output.context = [];
+
+        if (!relay.connected) return;
+
+        const res = await client.session.messages({
+          path: { id: evt.sessionID },
+          query: { limit: 10 },
+        });
+
+        if (!res.data?.length) return;
+
+        const parts: string[] = [];
+        for (const msg of res.data) {
+          for (const p of msg.parts) {
+            if (p.type === "text" && "text" in p && p.text) {
+              parts.push(`[${msg.info.role}] ${p.text}`);
+            }
+          }
+        }
+
+        const raw = parts.join("\n\n").slice(0, 2000);
+        if (!raw) return;
+
+        await relay.call("memory_save", {
+          type: "decision",
+          content: raw,
+          scope: "project",
+          project_hash: "",
+        });
+
+        console.log("[bifrost] auto-saved decision memory on compacting");
+      } catch (err) {
+        console.warn("[bifrost] experimental.session.compacting error (non-fatal):", err);
+      }
+    },
+  };
+}
