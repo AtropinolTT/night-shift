@@ -22,6 +22,7 @@ from typing import Any
 
 import httpx
 
+from companion.classifier.feedback import check_active_learned_rules
 from companion.config import load_config
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -37,6 +38,7 @@ TIMEOUT_S: float = 5.0
 #  Pre-filter: tool-name classification tables
 # ═══════════════════════════════════════════════════════════════════════
 
+# ── READ_ONLY_TOOLS — MUST KEEP IN SYNC with plugin/index.ts ──
 # Tools that only *read* data — safe to ALLOW unconditionally.
 READ_ONLY_TOOLS: frozenset[str] = frozenset(
     {
@@ -163,8 +165,36 @@ def _build_prompt(
     session_context: dict[str, Any] | None,
 ) -> str:
     """Build the security-review prompt — **no secrets exposed**."""
+    # Sanitize tool_name — prevent prompt injection via newlines, control chars,
+    # Unicode homoglyphs, decision keywords, or excessive length.
+    if not isinstance(tool_name, str):
+        raise ValueError(f"Tool name must be a string, got {type(tool_name).__name__}")
+    if len(tool_name) > 128:
+        raise ValueError(f"Tool name too long ({len(tool_name)} > 128 chars): {tool_name!r}")
+    if "\n" in tool_name or "\r" in tool_name or "\t" in tool_name:
+        raise ValueError(
+            f"Tool name contains whitespace/control chars (possible injection): {tool_name!r}"
+        )
+    if not all(ord(c) >= 32 and ord(c) < 0x110000 for c in tool_name):
+        raise ValueError(
+            f"Tool name contains invalid Unicode characters: {tool_name!r}"
+        )
+    # Reject decision keywords embedded in the tool name (case-insensitive)
+    # to prevent "my_ALLOW_tool" or "readDENY" from biasing the model.
+    lowered = tool_name.lower()
+    for keyword in ("allow", "deny", "ask_user"):
+        if keyword in lowered:
+            raise ValueError(
+                f"Tool name contains decision keyword {keyword!r} (possible prompt injection): {tool_name!r}"
+            )
+    # Normalize Unicode homoglyphs (fullwidth Latin → ASCII) to prevent
+    # Ｒｅａｄ looking identical to "Read" to humans but different to the model.
+    import unicodedata
+    tool_name = unicodedata.normalize("NFKC", tool_name)
+    tool_name_display = tool_name.replace(":", "\\:")
+
     context_parts: list[str] = [
-        f"Tool: {tool_name}",
+        f"Tool: {tool_name_display}",
     ]
 
     # Truncate args to avoid prompt bloat / accidental secret leak
@@ -336,6 +366,14 @@ def classify_tool_call(
         if _bash_allowlisted(command):
             return {"decision": "ALLOW", "reason": f"allowlisted: {command[:80]}"}
 
+        # Check active learned rules before model dispatch
+        learned = check_active_learned_rules(tool_name, tool_args)
+        if learned is not None:
+            return {
+                "decision": learned["decision"],
+                "reason": f"learned rule #{learned['rule_id']}: {learned['decision']}",
+            }
+
         # Unknown bash → model dispatch
         prompt = _build_prompt(tool_name, tool_args, file_paths, session_context)
         return _dispatch_sync(prompt)
@@ -362,6 +400,14 @@ def classify_tool_call(
             "reason": f"destructive tool: {tool_name}",
         }
 
-    # ── 6. Unknown → model dispatch (slow-path) ───────────────────
+    # ── 6. Check active learned rules before model dispatch ───────
+    learned = check_active_learned_rules(tool_name, tool_args)
+    if learned is not None:
+        return {
+            "decision": learned["decision"],
+            "reason": f"learned rule #{learned['rule_id']}: {learned['decision']}",
+        }
+
+    # ── 7. Unknown → model dispatch (slow-path) ───────────────────
     prompt = _build_prompt(tool_name, tool_args, file_paths, session_context)
     return _dispatch_sync(prompt)
