@@ -126,22 +126,37 @@ def _load_with_imports(
         if not imported.exists():
             parts.append(f"<!-- @import {target}: not found -->\n")
             continue
-        # Reject symlinks pointing outside project (TOCTOU race mitigation)
-        # On Windows O_NOFOLLOW is unavailable — use try/except for portability
+        # Reject symlinks: when imported is a symlink, O_NOFOLLOW raises ELOOP
+        # which is OSError. We CATCH and REJECT (not silently fall through).
+        # On Windows O_NOFOLLOW is unavailable (AttributeError) — fall back
+        # to checking the lstat() (does not follow symlinks) for symlink status.
         try:
             import os as _os
-            _fd = _os.open(imported, _os.O_RDONLY | _os.O_NOFOLLOW)
             try:
-                # Verify the open FD's path is still inside the project
-                _real = _os.path.realpath(_os.fspath(imported))
-                if not _real.startswith(str(project_root.resolve())):
-                    parts.append(f"<!-- @import {target}: skipped (symlink target outside project) -->\n")
-                    continue
-            finally:
-                _os.close(_fd)
-        except (OSError, AttributeError):
-            # AttributeError on Windows (no O_NOFOLLOW), OSError on other failures
-            # Fall through to the existing existence check
+                _os.open(str(imported), _os.O_RDONLY | _os.O_NOFOLLOW)
+            except (OSError, AttributeError) as e:
+                # Windows lacks O_NOFOLLOW; use lstat to detect symlink
+                try:
+                    if hasattr(_os.path, "islink") and _os.path.islink(str(imported)):
+                        parts.append(
+                            f"<!-- @import {target}: skipped (symlink rejected) -->\n"
+                        )
+                        continue
+                except OSError:
+                    pass
+                # Windows fallback: file may or may not be a symlink — rely on
+                # the resolved path check below
+        except Exception:
+            pass
+
+        # Belt-and-suspenders: verify the resolved path is still inside the
+        # project root (defends against TOCTOU between exists() and read).
+        try:
+            _resolved_real = _os.path.realpath(str(imported)) if "_os" in dir() else str(imported.resolve())
+            if not _resolved_real.startswith(str(project_root.resolve())):
+                parts.append(f"<!-- @import {target}: skipped (path outside project) -->\n")
+                continue
+        except OSError:
             pass
 
         sub_content, sub_sources = _load_with_imports(
