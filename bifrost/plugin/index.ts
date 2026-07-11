@@ -3,12 +3,12 @@ import { fileURLToPath } from "node:url";
 import type { Hooks, PluginInput, PluginOptions } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin";
 import { MCPRelay } from "./mcp-relay.js";
+import { HealthMonitor } from "./health.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const COMPANION_SCRIPT = path.resolve(__dirname, "..", "companion", "server.py");
 
-// ── Pre-filter: read-only tools that skip the companion entirely ──────
-// Mirrors classifier.py READ_ONLY_TOOLS to avoid ~1586ms relay round-trip.
+// ── READ_ONLY_TOOLS — MUST KEEP IN SYNC with companion/classifier/classifier.py ──
 const READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
   "Read",
   "Glob",
@@ -44,7 +44,7 @@ interface FusionResult {
   fused_answer: string;
   cost: number;
   wall_time_ms: number;
-  timed_out_models: string[];
+  timed_out_models?: string[];
   label: string;
 }
 
@@ -189,7 +189,7 @@ function formatFusionOutput(result: FusionResult): string {
   }
 
   // Timed-out models
-  if (result.timed_out_models.length > 0) {
+  if (result.timed_out_models && result.timed_out_models.length > 0) {
     lines.push(
       `⚠️ **Timed-out models:** ${result.timed_out_models.join(", ")}`,
       "",
@@ -321,16 +321,27 @@ export default async function bifrostPlugin(
 ): Promise<Hooks> {
   const relay = new MCPRelay();
   const { client } = pluginInput;
+  const monitor = new HealthMonitor(relay);
 
   try {
-    await relay.connect("python3", COMPANION_SCRIPT);
+    // First arg is pythonPath (use undefined to auto-detect via PATH),
+    // second arg is the script to run. This ensures the validator checks
+    // a real Python binary, not a .py file (which would fail the safe-prefix
+    // check on systems where the project lives outside /home, /usr, /opt).
+    await relay.connect(undefined, COMPANION_SCRIPT);
+    monitor.start();
   } catch (err) {
     console.warn("[bifrost] companion not available (non-fatal):", err);
   }
 
   return {
     dispose: async () => {
-      await relay.disconnect();
+      monitor.stop();
+      try {
+        await relay.disconnect();
+      } catch (err) {
+        console.warn("[bifrost] error disconnecting from companion:", err);
+      }
     },
 
     event: async (evt) => {
@@ -351,7 +362,7 @@ export default async function bifrostPlugin(
 
       try {
         // ── Call companion classifier via async MCP relay ──────────────
-        const result = await relay.call<ClassifierResult>(
+        const result = await monitor.call<ClassifierResult>(
           "classify_tool_call",
           {
             tool_name: evt.tool,
@@ -447,7 +458,7 @@ export default async function bifrostPlugin(
             return "❌ Bifrost companion is not running. Start `bifrost-companion` to use `/fusion`.";
           }
           try {
-            const result = await relay.call<FusionResult>(
+            const result = await monitor.call<FusionResult>(
               "fusion_dispatch_tool",
               {
                 prompt: args.prompt,
@@ -491,7 +502,7 @@ export default async function bifrostPlugin(
           }
 
           try {
-            const result = await relay.call<FusionResult>(
+            const result = await monitor.call<FusionResult>(
               "fusion_dispatch_tool",
               { prompt, cost_ceiling: 0.5 },
               120_000,
@@ -537,7 +548,7 @@ export default async function bifrostPlugin(
           }
 
           try {
-            const result = await relay.call<GoalLoopResult>(
+            const result = await monitor.call<GoalLoopResult>(
               "goal_loop",
               {
                 goal,
@@ -569,6 +580,132 @@ export default async function bifrostPlugin(
           return;
         }
 
+        // ── /review ──────────────────────────────────────────────────
+        if (input.command === "review") {
+          const rawArgs = (input.arguments ?? "").trim();
+          const baseRef = rawArgs || "HEAD~1";
+          output.parts = [
+            {
+              type: "text" as const,
+              text: [
+                "╔══════════════════════════════════════════════════════════════╗",
+                "║  🔍  Code Review — Bifrost Review Bridge                      ║",
+                "╚══════════════════════════════════════════════════════════════╝",
+                "",
+                `**Reviewing changes since:** \`${baseRef}\``,
+                "",
+                "Run the `review` skill for a standards-and-spec review,",
+                "or use `git diff` to inspect changes manually.",
+                "",
+                "**Quick check:**",
+                `\`\`\`git diff ${baseRef} --stat\`\`\``,
+              ].join("\n"),
+            },
+          ] as never;
+          return;
+        }
+
+        // ── /explain ──────────────────────────────────────────────────
+        if (input.command === "explain") {
+          const rawArgs = (input.arguments ?? "").trim();
+          if (!rawArgs) {
+            output.parts = [
+              {
+                type: "text" as const,
+                text: "**Usage:** `/explain <file path or code snippet>` — get an AI explanation of the code.",
+              },
+            ] as never;
+            return;
+          }
+          if (!relay.connected) {
+            output.parts = [
+              {
+                type: "text" as const,
+                text: "❌ Bifrost companion is not running. Start `bifrost-companion` to use `/explain`.",
+              },
+            ] as never;
+            return;
+          }
+          try {
+            const result = await monitor.call<FusionResult>(
+              "fusion_dispatch_tool",
+              {
+                prompt: `Explain the following code clearly and concisely:\n\n${rawArgs}`,
+                models: ["deepseek-v4-pro"],
+                cost_ceiling: 0.1,
+              },
+              60_000,
+            );
+            output.parts = [
+              {
+                type: "text" as const,
+                text: `**📖 Code Explanation**\n\n${result.fused_answer}`,
+              },
+            ] as never;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            output.parts = [
+              {
+                type: "text" as const,
+                text: `❌ /explain failed: ${msg}`,
+              },
+            ] as never;
+          }
+          return;
+        }
+
+        // ── /commit ──────────────────────────────────────────────────
+        if (input.command === "commit") {
+          const rawArgs = (input.arguments ?? "").trim();
+          output.parts = [
+            {
+              type: "text" as const,
+              text: [
+                "╔══════════════════════════════════════════════════════════════╗",
+                "║  📝  Smart Commit — Bifrost Commit Bridge                    ║",
+                "╚══════════════════════════════════════════════════════════════╝",
+                "",
+                "**Usage:** `/commit` or `/commit \"custom message\"`",
+                "",
+                "Use the `git-master` skill for atomic commits with proper messages.",
+                rawArgs
+                  ? `**Message:** "${rawArgs}"`
+                  : "**No message provided** — the agent will generate one from staged changes.",
+              ].join("\n"),
+            },
+          ] as never;
+          return;
+        }
+
+        // ── /test ──────────────────────────────────────────────────
+        if (input.command === "test") {
+          const rawArgs = (input.arguments ?? "").trim();
+          output.parts = [
+            {
+              type: "text" as const,
+              text: [
+                "╔══════════════════════════════════════════════════════════════╗",
+                "║  🧪  Test Runner — Bifrost Test Bridge                       ║",
+                "╚══════════════════════════════════════════════════════════════╝",
+                "",
+                "**Usage:** `/test [test file or pattern]`",
+                "",
+                rawArgs
+                  ? `**Target:** \`${rawArgs}\``
+                  : "**No target specified** — use `tdd` skill for red-green-refactor workflow.",
+                "",
+                "**Quick run:**",
+                "```bash",
+                rawArgs
+                  ? `python -m pytest ${rawArgs} -v`
+                  : "python -m pytest tests/ -v",
+                "```",
+              ].join("\n"),
+            },
+          ] as never;
+          return;
+        }
+
         // ── /audit-permissions ─────────────────────────────────────────
         if (input.command !== "audit-permissions") return;
 
@@ -583,14 +720,15 @@ export default async function bifrostPlugin(
           return;
         }
 
-        const result = await relay.call<string>("config_migrate", {
+        const result = await monitor.call<string>("config_migrate", {
           source_path: sourcePath,
         });
 
         const isToolError =
-          result.startsWith("No Claude Code config found at") ||
-          result.startsWith("Error reading") ||
-          result.startsWith("Error parsing");
+          typeof result === "string" &&
+          (result.startsWith("No Claude Code config found at") ||
+            result.startsWith("Error reading") ||
+            result.startsWith("Error parsing"));
 
         if (isToolError) {
           output.parts = [{ type: "text", text: `❌ ${result}` }] as never;
@@ -623,7 +761,6 @@ export default async function bifrostPlugin(
     "experimental.session.compacting": async (evt, output) => {
       try {
         console.log("[bifrost] session compacting:", evt.sessionID);
-        output.context = [];
 
         if (!relay.connected) return;
 
@@ -646,7 +783,7 @@ export default async function bifrostPlugin(
         const raw = parts.join("\n\n").slice(0, 2000);
         if (!raw) return;
 
-        await relay.call("memory_save", {
+        await monitor.call("memory_save", {
           type: "decision",
           content: raw,
           scope: "project",
@@ -656,6 +793,29 @@ export default async function bifrostPlugin(
         console.log("[bifrost] auto-saved decision memory on compacting");
       } catch (err) {
         console.warn("[bifrost] experimental.session.compacting error (non-fatal):", err);
+      }
+    },
+
+    "tool.execute.after": async (evt) => {
+      try {
+        const e = evt as any;
+        const elapsed = e.elapsedMs ?? 0;
+        const error = e.error;
+        const status = error ? "FAIL" : "OK";
+        console.log(
+          `[bifrost] tool.execute.after ${evt.tool} → ${status} (${elapsed}ms)`,
+        );
+
+        if (relay.connected && error) {
+          await monitor.call("memory_save", {
+            type: "feedback",
+            content: `Tool ${evt.tool} failed: ${String(error).slice(0, 500)}`,
+            scope: "project",
+            project_hash: "",
+          });
+        }
+      } catch (err) {
+        console.warn("[bifrost] tool.execute.after error (non-fatal):", err);
       }
     },
   };
