@@ -23,7 +23,6 @@ DEFAULTS: dict[str, Any] = {
     "cost_ceiling_default": 1.00,
     "allowlisted_bash_commands": [
         "ls",
-        "cat",
         "git status",
         "git diff",
         "git log",
@@ -120,6 +119,13 @@ def load_config(path: str | Path | None = None) -> SimpleNamespace:
 
     if resolved is not None and resolved.exists():
         try:
+            # Security: refuse oversized config files (DoS / billion-laughs)
+            _MAX_CONFIG_YAML_SIZE = 1_048_576  # 1MB
+            if resolved.stat().st_size > _MAX_CONFIG_YAML_SIZE:
+                raise ValueError(
+                    f"Config file {resolved} exceeds maximum size "
+                    f"({resolved.stat().st_size} > {_MAX_CONFIG_YAML_SIZE} bytes)"
+                )
             with open(resolved) as fh:
                 user_cfg = yaml.safe_load(fh) or {}
         except yaml.YAMLError as exc:
