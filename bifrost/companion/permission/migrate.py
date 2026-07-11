@@ -29,7 +29,44 @@ def _is_secret(key: str, value: str) -> bool:
     if re.search(r"api[_-]?key", key, re.IGNORECASE):
         return True
     # Pattern 4: values that are clearly tokens (long base64-like strings)
-    if re.search(r"^[A-Za-z0-9+/=_-]{40,}$", value):
+    # Tightened to require BOTH uppercase AND lowercase letters to avoid
+    # false positives on "$5.00" (digits only), "AAAA..." (uppercase only),
+    # "hello_world_..." (lowercase only), etc.
+    if (
+        len(value) >= 40
+        and re.search(r"^[A-Za-z0-9+/=_-]+$", value)
+        and re.search(r"[A-Z]", value)
+        and re.search(r"[a-z]", value)
+    ):
+        return True
+    # Pattern 5: JWT tokens (eyJ...)
+    if re.search(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}", value):
+        return True
+    # Pattern 6: AWS access keys (AKIA...)
+    if re.search(r"AKIA[0-9A-Z]{16}", value):
+        return True
+    # Pattern 7: GitHub tokens (ghp_, github_pat_, gho_, ghu_, ghs_)
+    if re.search(r"(?:ghp_|github_pat_|gho_|ghu_|ghs_)[A-Za-z0-9_]{36,}", value):
+        return True
+    # Pattern 8: Bearer tokens in config values (require 20+ chars after "Bearer "
+    # to avoid false positives like "Bearer of bad news" or "Bearer my-token")
+    if re.search(r"\bBearer\s+[A-Za-z0-9_\-\.]{20,}", value):
+        return True
+    # Pattern 9: Azure secrets (AccountKey, AZURE_CLIENT_SECRET, AZURE_STORAGE_KEY,
+    # or SAS tokens starting with sv=)
+    if re.search(
+        r"(?:AccountKey|AccountName|AZURE_CLIENT_SECRET|AZURE_STORAGE_KEY|SAS_TOKEN|SharedAccessKey)",
+        key,
+        re.IGNORECASE,
+    ):
+        return True
+    if re.search(r"sv=[A-Za-z0-9\-]{10,}.*sig=[A-Za-z0-9+/=_\-]{20,}", value):
+        return True
+    # Pattern 10: PEM private keys (RSA, EC, OpenSSH, DSA)
+    if re.search(
+        r"-----BEGIN (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----",
+        value,
+    ):
         return True
     return False
 
@@ -296,3 +333,44 @@ def config_migrate(source_path: str = "~/.claude/settings.json") -> str:
         sections.append("")
 
     return "\n".join(sections)
+
+
+def config_migrate_project(project_root: str = ".") -> str:
+    """Migrate project-level config files (e.g. ``.claude/settings.local.json``).
+
+    Looks for known project-level config paths relative to *project_root*
+    and returns a merged migration block.  Falls back gracefully when no
+    project-level config is found.
+
+    Parameters
+    ----------
+    project_root : str
+        Root directory of the project (default: current directory).
+
+    Returns
+    -------
+    str
+        Formatted migration block, or an empty string if nothing was found.
+    """
+    root = Path(project_root).resolve()
+    candidates: list[Path] = [
+        root / ".claude" / "settings.local.json",
+        root / ".claude" / "settings.json",
+        root / ".opencode.json",
+        root / ".opencode.jsonc",
+    ]
+
+    results: list[str] = []
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        try:
+            result = config_migrate(str(candidate))
+            if result and not result.startswith("No Claude Code config found"):
+                results.append(
+                    f"// Project-level config from: {candidate}\n{result}"
+                )
+        except Exception:
+            continue
+
+    return "\n\n".join(results) if results else ""

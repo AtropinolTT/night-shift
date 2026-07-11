@@ -11,7 +11,7 @@ import os
 import re
 from pathlib import Path
 
-from bifrost.companion.config import load_config
+from companion.config import load_config
 
 
 # ── helpers ──────────────────────────────────────────────────────────────
@@ -107,6 +107,17 @@ def _load_with_imports(
         cursor = match.end()
 
         target = match.group(1).strip()
+        # Normalize Windows backslashes to forward slashes (avoid smuggled separators)
+        target = target.replace("\\", "/")
+        # Reject absolute paths and parent-traversal segments early
+        if target.startswith(("/", "~")) or ".." in Path(target).parts:
+            parts.append(f"<!-- @import {target}: skipped (path traversal) -->\n")
+            continue
+        # Reject overly long paths (PATH_MAX)
+        if len(target) > 4096:
+            parts.append(f"<!-- @import {target}: skipped (path too long) -->\n")
+            continue
+
         imported = (resolved.parent / target).resolve()
 
         if _is_outside_project(imported, project_root):
@@ -115,6 +126,23 @@ def _load_with_imports(
         if not imported.exists():
             parts.append(f"<!-- @import {target}: not found -->\n")
             continue
+        # Reject symlinks pointing outside project (TOCTOU race mitigation)
+        # On Windows O_NOFOLLOW is unavailable — use try/except for portability
+        try:
+            import os as _os
+            _fd = _os.open(imported, _os.O_RDONLY | _os.O_NOFOLLOW)
+            try:
+                # Verify the open FD's path is still inside the project
+                _real = _os.path.realpath(_os.fspath(imported))
+                if not _real.startswith(str(project_root.resolve())):
+                    parts.append(f"<!-- @import {target}: skipped (symlink target outside project) -->\n")
+                    continue
+            finally:
+                _os.close(_fd)
+        except (OSError, AttributeError):
+            # AttributeError on Windows (no O_NOFOLLOW), OSError on other failures
+            # Fall through to the existing existence check
+            pass
 
         sub_content, sub_sources = _load_with_imports(
             imported, project_root, depth + 1, max_depth, seen
@@ -157,7 +185,7 @@ def load_context(cwd: str | Path | None = None) -> dict:
     start = Path(cwd).resolve() if cwd is not None else Path.cwd().resolve()
 
     project_file = _find_project_file(start)
-    project_root = project_file.parent if project_file else start
+    project_root = project_file.parent.resolve() if project_file else start
 
     user_file = Path.home() / ".config" / "opencode" / "AGENTS.md"
 
