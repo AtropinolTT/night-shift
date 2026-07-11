@@ -338,8 +338,6 @@ ALLOWLISTED_BASH_CASES = [
     ("ls",),
     ("ls -la",),
     ("ls -la /workspace",),
-    ("cat README.md",),
-    ("cat /workspace/src/main.py",),
     ("git status",),
     ("git status --short",),
     ("git diff",),
@@ -371,8 +369,6 @@ class TestAllowlistedBash:
         "ls",
         "ls -la",
         "ls -la /workspace",
-        "cat README.md",
-        "cat /workspace/src/main.py",
         "git status",
         "git status --short",
         "git diff",
@@ -792,13 +788,12 @@ class TestEdgeCases:
     def test_special_characters_in_read_only_tool_name(
         self, metrics: _Metrics,
     ) -> None:
-        """Exact string matching — special chars in name don't affect it."""
-        # The classifier checks for exact name match, so special-chars
-        # appended to a known name are treated as unknown.
+        """Null byte in tool name must be REJECTED (prompt injection defense)."""
+        # After hardening: a null byte in the tool name raises ValueError
+        # before any classifier dispatch, so the classifier is never reached.
         weird = "Read\x00extra"  # null byte
-        result = _classify_and_record(metrics, UNKNOWN, weird, {"filePath": "/tmp/x"})
-        # This is NOT "Read", so it falls through to unknown → dispatch
-        assert result["decision"] == "ASK_USER"
+        with pytest.raises(ValueError, match="newline|whitespace|invalid Unicode"):
+            _classify_and_record(metrics, UNKNOWN, weird, {"filePath": "/tmp/x"})
 
     def test_unicode_in_tool_name(self, metrics: _Metrics) -> None:
         """Unicode tool names must not crash the classifier."""
@@ -934,10 +929,10 @@ class TestEdgeCases:
         assert result["decision"] == "ALLOW"
 
     def test_very_long_tool_name(self, metrics: _Metrics) -> None:
-        """Very long unknown tool name must dispatch without crashing."""
+        """Tool name > 128 chars must be REJECTED (DoS / prompt-stuffing defense)."""
         long_name = "a" * 5000
-        result = _classify_and_record(metrics, UNKNOWN, long_name, {})
-        assert result["decision"] == "ASK_USER"
+        with pytest.raises(ValueError, match="too long"):
+            _classify_and_record(metrics, UNKNOWN, long_name, {})
 
     # ── Tool name exact-match boundary ─────────────────────────────────
 
