@@ -16,7 +16,7 @@ version: "1.1.0"
 Pricing-aware job scheduler for DeepSeek V4. Jobs wait in project queues, dispatch
 during cheap off-peak windows, and route subagents to the cost-optimal model.
 
-**Pricing source:** `~/.claude/night-shift/pricing.json` — read this file for
+**Pricing source:** `$(scripts/config-dir.sh)/pricing.json` — read this file for
 current peak windows and rates. Do NOT hardcode prices in your reasoning.
 
 ## Non-Negotiable Rules (ALL Autonomy Levels)
@@ -108,7 +108,7 @@ At L3, peak + Pro is auto iff tokens ≤ `peak_dispatch_max_tokens`.
 
 ## Model Routing Matrix
 
-Read `~/.claude/night-shift/pricing.json` for current rates. Route by
+Read `$(scripts/config-dir.sh)/pricing.json` for current rates. Route by
 window × model-hint × job type (use table above for role):
 
 | Window   | model-hint | Role            | Model |
@@ -158,8 +158,8 @@ Job entry format in `## Pending`:
 
 1. Run `scripts/check-window.sh --json` to get current window.
 2. Run `scripts/parse-queue.sh --all` to aggregate all queues.
-3. Read `~/.claude/night-shift/config.json` for budget and autonomy level.
-4. Read `~/.claude/night-shift/state.json` for today's spend.
+3. Read `$(scripts/config-dir.sh)/config.json` for budget and autonomy level.
+4. Read `$(scripts/config-dir.sh)/state.json` for today's spend.
 5. Run `CronList` to verify the active cron matches schedule.off_peak_wakeup.
 6. Display:
 
@@ -193,7 +193,7 @@ Reset failed → pending. The attempt counter resets to 0, giving 3 fresh attemp
 The job moves from `## Failed (needs human)` back to `## Pending`.
 
 ### /night-shift:config [--set key=value]
-Show config. With `--set`, update `~/.claude/night-shift/config.json`.
+Show config. With `--set`, update `$(scripts/config-dir.sh)/config.json`.
 Announce every change to the user. Do not modify silently.
 Example: `/night-shift:config --set autonomy=L3`
 
@@ -210,7 +210,7 @@ Run both scripts:
   budget.
 If estimated_tokens is missing (0 or null): ask user for estimate before proceeding.
 
-Check budget in `~/.claude/night-shift/state.json`:
+Check budget in `$(scripts/config-dir.sh)/state.json`:
 - If `spent_today >= daily_max_tokens`: ALL dispatch unconditionally blocked
   regardless of estimate, soft_cap, or prior state. Only daily rollover (at
   midnight Beijing time) resets spent_today to 0. The "already breached"
@@ -306,7 +306,7 @@ Update the job entry:
 - [x] **job-id** — done YYYY-MM-DD | N attempts | ~N tokens
 ```
 
-Update `~/.claude/night-shift/state.json`:
+Update `$(scripts/config-dir.sh)/state.json`:
 ```json
 {
   "last_dispatch": "2026-07-01T18:07:00+08:00",
@@ -340,11 +340,10 @@ The cron prompt must explicitly tell the agent to load the night-shift skill.
 Without this, the agent won't have pricing awareness or the dispatch protocol:
 
 ```
-You have the night-shift skill at ~/.claude/skills/night-shift/SKILL.md.
-First: read the SKILL.md file and follow its dispatch protocol precisely.
-Then: check the current pricing window, scan all NIGHTSHIFT.md files,
+Load the night-shift skill and follow its dispatch protocol precisely.
+The skill resolves its config directory via `scripts/config-dir.sh`.
+Check the current pricing window, scan all NIGHTSHIFT.md files,
 and dispatch pending jobs within budget. Update queue status after each job.
-Follow the autonomy rules from ~/.claude/night-shift/config.json.
 ```
 
 ### Cron Dispatch Cycle
@@ -404,7 +403,12 @@ Upgrade by setting `autonomy: "L3"` in config.json after ≥1 week of L2.
 
 ## Configuration Files
 
-All under `~/.claude/night-shift/`:
+Config directory resolved by `scripts/config-dir.sh`:
+- `QODER_NS_CONFIG_DIR` env override (highest priority)
+- `~/.qoder/night-shift/` (QoderCLI)
+- `~/.claude/night-shift/` (Claude Code)
+- `~/.codex/night-shift/` (Codex CLI)
+- `~/.opencode/night-shift/` (OpenCode)
 
 | File | Purpose | Editable? |
 |------|---------|-----------|
