@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # check-window.sh — Returns current Beijing time pricing window for DeepSeek V4
-# Reads peak hour definitions from ~/.claude/night-shift/pricing.json
+# Reads peak hour definitions from $(scripts/config-dir.sh)/pricing.json
 #
 # Output: window=peak|off-peak minutes_remaining=<int> next_transition=HH:MM next_window=peak|off-peak
 # Options:
@@ -9,7 +9,10 @@
 
 set -euo pipefail
 
-PRICING_FILE="$HOME/.claude/night-shift/pricing.json"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONFIG_DIR="$($SCRIPT_DIR/config-dir.sh)"
+
+PRICING_FILE="$CONFIG_DIR/pricing.json"
 SIMULATE=""
 OUTPUT_JSON=false
 
