@@ -128,8 +128,10 @@ window × model-hint × job type (use table above for role):
 
 ### /night-shift:submit <project> <description>
 
-Append a job to `<project>/NIGHTSHIFT.md`. If the file doesn't exist, ask the
-user for the project path first — do NOT create project directories unilaterally.
+Append a job to `<project>/NIGHTSHIFT.md`. If the project directory exists but
+the file doesn't, create `NIGHTSHIFT.md` with an empty `## Pending` section.
+If the project directory itself doesn't exist, ask the user for the correct
+project path first — do NOT create project directories unilaterally.
 
 Job id derivation: kebab-case, ≤40 chars. If the description generates a job-id
 longer than 40 chars, truncate to 36 chars and append a 4-char hex suffix.
@@ -234,7 +236,7 @@ This prevents double-dispatch when cron and manual commands overlap.
 
 ### 3. Model Selection
 
-Use the routing matrix above. Apply the type→role mapping table.
+Use the Model Routing Matrix above. Apply the type→role mapping table.
 
 ### 4. Execute
 
