@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # estimate-cost.sh — Estimate DeepSeek V4 API cost for a job
-# Reads pricing from ~/.claude/night-shift/pricing.json
+# Reads pricing from $(scripts/config-dir.sh)/pricing.json
 #
 # Usage: estimate-cost.sh --tokens <N> --model <pro|flash> --window <peak|off-peak> [--json]
 #   --tokens N             Estimated total tokens
@@ -10,6 +10,9 @@
 #   --json                 Output as JSON
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONFIG_DIR="$($SCRIPT_DIR/config-dir.sh)"
 
 TOKENS=""
 MODEL=""
@@ -38,7 +41,7 @@ export NS_MODEL="$MODEL"
 export NS_WINDOW="$WINDOW"
 export NS_INPUT_RATIO="$INPUT_RATIO"
 export NS_OUTPUT_JSON="$OUTPUT_JSON"
-export NS_PRICING_FILE="$HOME/.claude/night-shift/pricing.json"
+export NS_PRICING_FILE="$CONFIG_DIR/pricing.json"
 
 python3 - "$NS_PRICING_FILE" << 'PYEOF'
 import json, os, sys
