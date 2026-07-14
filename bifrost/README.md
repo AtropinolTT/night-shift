@@ -1,6 +1,6 @@
 # Bifrost
 
-**v0.1.0-alpha**. Experimental. Not for production use.
+**v0.2.1**. Security-hardened release. Not for production use.
 
 An OpenCode plugin and Python FastMCP companion that bridges agent capabilities: persistent memory, tool call classification, goal-oriented agent loops, skill bridging, permission auditing, and multi-model synthesis.
 
@@ -77,38 +77,67 @@ npm install
 cd ..
 ```
 
-### Step 4: Wire into your OpenCode config
+### Step 4: Install the plugin
 
-Copy the snippet into your `opencode.json` (create the file at your project root if it doesn't exist):
+Bifrost has two parts: a **TypeScript plugin** and a **Python companion** (MCP server).
+Both must be configured in `opencode.json` (global at `~/.config/opencode/opencode.json` or per-project).
+
+#### Option A: Published npm package (recommended)
+
+Once published to npm, add the package name to the `plugin` array:
 
 ```jsonc
 {
-  "plugins": {
-    "bifrost": {
-      "enabled": true
-    }
-  },
-  "mcpServers": {
+  "plugin": [
+    "bifrost-plugin"
+  ],
+  "mcp": {
     "bifrost-companion": {
-      "command": "uv",
-      "args": ["run", "--directory", "bifrost/companion", "server.py"]
+      "type": "local",
+      "command": ["python3", "/path/to/bifrost/companion/server.py"],
+      "enabled": true
     }
   }
 }
 ```
 
-If you don't use `uv`, replace the `mcpServers.bifrost-companion` block with:
+> **Key detail**: The `mcp` key (not `mcpServers`) is used for MCP server configuration.
+> The `command` must be a **single array** of command + arguments.
+> OpenCode loads plugins from the `plugin` array by npm package name.
+
+#### Option B: Local development (npm link)
+
+For development before publishing to npm:
+
+```bash
+cd bifrost/plugin
+npm link        # makes "bifrost-plugin" available as a local npm package
+```
+
+Then add to `opencode.json`:
 
 ```jsonc
-"bifrost-companion": {
-  "command": "python",
-  "args": ["bifrost/companion/server.py"]
+{
+  "plugin": [
+    "oh-my-openagent@latest",
+    "bifrost-plugin"
+  ],
+  "mcp": {
+    "bifrost-companion": {
+      "type": "local",
+      "command": ["python3", "/path/to/bifrost/companion/server.py"],
+      "enabled": true
+    }
+  }
 }
 ```
 
-Make sure the `bifrost/` directory path in the config is relative to your project root.
+#### Option C: Local plugin files (alternative)
 
-The snippet lives at `bifrost/opencode.json.snippet`. You can copy it directly.
+Drop the compiled plugin file into `~/.config/opencode/plugins/bifrost.js`
+(or `.opencode/plugins/bifrost.js` for per-project).
+If the plugin needs npm dependencies, create a `~/.config/opencode/package.json`
+with those dependencies — OpenCode runs `bun install` at startup to install them.
 
 ---
 
@@ -116,13 +145,15 @@ The snippet lives at `bifrost/opencode.json.snippet`. You can copy it directly.
 
 ### Plugin: `opencode.json`
 
-The plugin only needs one key:
+The plugin is loaded via the `plugin` array (npm package name). No additional
+`plugins` object is needed — OpenCode auto-discovers the plugin.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `plugins.bifrost.enabled` | `boolean` | `true` | Enable/disable the Bifrost plugin |
+| `plugin[]` | `string[]` | `[]` | Add `"bifrost-plugin"` to load Bifrost from npm |
 
-The companion MCP server is configured in the standard `mcpServers` block. No additional plugin-level config is required.
+The companion MCP server is configured under the `mcp` key (not `mcpServers`).
+See [Step 4](#step-4-install-the-plugin) for the correct config block.
 
 ### Companion: `config.yaml`
 
@@ -140,7 +171,7 @@ All fields have sensible defaults. You only need to create this file if you want
 | `max_context_tokens` | `int` | `8000` | Maximum context window for injection |
 | `max_turns_default` | `int` | `10` | Default max turns for goal loop |
 | `cost_ceiling_default` | `float` | `1.00` | Default dollar ceiling for goal loop |
-| `allowlisted_bash_commands` | `list[str]` | `["ls","cat","git status","git diff","git log","pwd","echo","python --version","pip list"]` | Bash commands the classifier pre-filters as safe |
+| `allowlisted_bash_commands` | `list[str]` | `["ls","git status","git diff","git log","pwd","echo","python --version","pip list"]` | Bash commands the classifier pre-filters as safe |
 
 Example `~/.bifrost/config.yaml`:
 
@@ -186,7 +217,7 @@ cost_ceiling_default: 2.00
 
 | Component | Language | Role |
 |---|---|---|
-| **Plugin** (`plugin/`) | TypeScript | Hooks into OpenCode lifecycle. Pre-filters known-safe tools locally to avoid unnecessary MCP round-trips. Relays classification, goals, fusion, and audit requests to the companion. Registers `/goal`, `/fusion`, and `/audit-permissions` slash commands. |
+| **Plugin** (`plugin/`) | TypeScript | Hooks into OpenCode lifecycle. Pre-filters known-safe tools locally to avoid unnecessary MCP round-trips. Relays classification, goals, fusion, and audit requests to the companion. Registers `/goal`, `/fusion`, `/audit-permissions`, `/review`, `/explain`, `/commit`, and `/test` slash commands. Includes circuit breaker for MCP relay resilience. |
 | **Companion** (`companion/`) | Python (FastMCP) | Long-lived server process. Owns all state (SQLite), all model dispatch, skill parsing, and configuration. Exposes 12 MCP tools over stdio. Never modifies source files. |
 | **SQLite** (`~/.bifrost/bifrost.db`) | Data | Persistent storage for memories, classifier feedback, learned rules, and configuration. Uses WAL journal mode for concurrent access. Full-text search via FTS5 virtual table. |
 
@@ -257,13 +288,25 @@ Read-only audit of configuration from other coding agent tools. Maps permission 
 /audit-permissions ~/other-agent-config.json
 ```
 
+**`/review [base-ref]`**  
+Code review bridge. Displays a diff summary and invokes the `review` skill for a standards-and-spec review against a base reference (default: `HEAD~1`).
+
+**`/explain <file or code>`**  
+Code explanation bridge. Sends a file path or code snippet to the companion for an AI-generated explanation.
+
+**`/commit [message]`**  
+Smart commit bridge. Generates or accepts a commit message and invokes the `git-master` skill for atomic commits.
+
+**`/test [target]`**  
+Test runner bridge. Runs or delegates to the `tdd` skill for red-green-refactor testing workflow.
+
 ### MCP tools (for programmatic use)
 
 The companion exposes these MCP tools over stdio. They are intended for the plugin to call, but can be invoked by any MCP client:
 
 | Tool | Category |
 |---|---|
-| `version` | Returns `"bifrost v0.1.0"` |
+| `version` | Returns `"bifrost v0.2.1"` |
 | `echo` | Echoes a message back (health check) |
 | `memory_save`, `memory_search`, `memory_list`, `memory_delete` | Persistent memory |
 | `classify_tool_call` | Tool call classification |
@@ -271,7 +314,10 @@ The companion exposes these MCP tools over stdio. They are intended for the plug
 | `goal_loop` | Classifier-gated agent simulation |
 | `fusion_dispatch_tool` | Multi-model dispatch and synthesis |
 | `config_migrate` | Read-only config migration audit |
+| `config_migrate_project` | Project-level config migration |
 | `skill_load`, `skill_list` | Skill discovery and loading |
+| `session_cost_summary` | Per-session cost tracking |
+| `count_tokens` | Accurate token counting via tiktoken |
 
 ---
 
@@ -281,11 +327,11 @@ Bifrost discovers skills from three search paths (project-level `.agents/skills/
 
 ### Compatibility
 
-Not all workspace skills are compatible with Bifrost's skill bridge. A compatibility matrix is maintained at [`SKILL_COMPAT.md`](SKILL_COMPAT.md). As of v0.1.0-alpha:
+Not all workspace skills are compatible with Bifrost's skill bridge. A compatibility matrix is maintained at [`SKILL_COMPAT.md`](SKILL_COMPAT.md). As of v0.2.1:
 
-- **10 skills** are **verified**: manually audited for zero shell exec, valid frontmatter, no dangerous patterns, and compatible argument substitution
-- **~66 skills** are **best-effort**: exist in the workspace but have not been verified
-- **3 skills** are user-scope with unknown compatibility
+- **9 skills** are **verified**: manually audited for zero shell exec, valid frontmatter, no dangerous patterns, and compatible argument substitution
+- **74 skills** are **best-effort**: exist in the workspace but have not been verified
+- **4 skills** are user-scope with unknown compatibility
 
 To contribute a verification: read the skill's `SKILL.md`, check it against the criteria in `SKILL_COMPAT.md`, and open a PR updating its status.
 
@@ -311,7 +357,7 @@ Skills with verified compatibility can be loaded and their instructions injected
 
 **No distributed memory.** The SQLite database lives at `~/.bifrost/bifrost.db` on a single machine. There is no sync, replication, or shared memory across team members.
 
-**Alpha software.** This is v0.1.0-alpha. APIs, MCP tool signatures, and config formats may change between releases. There is no migration path for breaking changes yet. The companion may crash on unexpected inputs. Do not run in production.
+**Alpha software.** This is v0.2.1. APIs, MCP tool signatures, and config formats may change between releases. There is no migration path for breaking changes yet. The companion may crash on unexpected inputs. Do not run in production.
 
 ---
 
@@ -334,10 +380,10 @@ Bifrost welcomes contributions. Before submitting, please:
 
 ### Areas that need help
 
-- Real model dispatch for fusion (currently mocked)
+- Real model dispatch for fusion (currently uses mock responses — the dispatch infrastructure is in place but model API calls return synthetic data)
 - Live pricing API integration for cost tracking
 - Goal loop with actual agent execution (beyond simulation)
-- Skill compatibility verification for the ~66 best-effort skills
+- Skill compatibility verification for the 74 best-effort skills
 - Comprehensive test coverage for the companion
 
 ---

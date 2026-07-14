@@ -1,7 +1,6 @@
 import hashlib
 import os
 import subprocess
-from pathlib import Path
 
 
 def _get_git_remote_url() -> str | None:

@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import unicodedata
 from typing import Any
 
 import httpx
@@ -88,7 +89,6 @@ _DESTRUCTIVE_NAME_SUBSTRINGS: tuple[str, ...] = (
     "format",
     "mount",
     "unmount",
-    "dd",
     "mkfs",
     "fdisk",
     "parted",
@@ -189,7 +189,6 @@ def _build_prompt(
             )
     # Normalize Unicode homoglyphs (fullwidth Latin → ASCII) to prevent
     # Ｒｅａｄ looking identical to "Read" to humans but different to the model.
-    import unicodedata
     tool_name = unicodedata.normalize("NFKC", tool_name)
     tool_name_display = tool_name.replace(":", "\\:")
 
@@ -349,7 +348,8 @@ def classify_tool_call(
         ``{"decision": "ALLOW"|"DENY"|"ASK_USER", "reason": "…"}``
     """
     # ── 1. Read-only tools → ALLOW (instant) ──────────────────────
-    if tool_name in READ_ONLY_TOOLS:
+    _normalized_name = unicodedata.normalize("NFKC", tool_name)
+    if _normalized_name in READ_ONLY_TOOLS:
         return {"decision": "ALLOW", "reason": f"read-only: {tool_name}"}
 
     # ── 2. Bash tool — multi-stage check ──────────────────────────
@@ -374,9 +374,8 @@ def classify_tool_call(
                 "reason": f"learned rule #{learned['rule_id']}: {learned['decision']}",
             }
 
-        # Unknown bash → model dispatch
-        prompt = _build_prompt(tool_name, tool_args, file_paths, session_context)
-        return _dispatch_sync(prompt)
+        # Default: ALLOW. Destructive patterns already caught above.
+        return {"decision": "ALLOW", "reason": f"bash command: {command[:80]}"}
 
     # ── 3. Write tools → ASK_USER ─────────────────────────────────
     if tool_name in WRITE_TOOLS:

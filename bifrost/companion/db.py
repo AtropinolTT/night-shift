@@ -28,24 +28,26 @@ def _chmod(path: Path, mode: int) -> None:
         pass  # best-effort
 
 
-def _verify_permissions() -> None:
-    """Warn if `~/.bifrost/` or `bifrost.db` exist with overly-permissive
-    bits (group/world readable). The DB may contain API keys, classifier
-    decisions, and learned rules — restrict to owner-only."""
-    for path, expected_mode in ((DB_DIR, 0o700), (DB_PATH, 0o600)):
+def _verify_permissions(db_dir: Path, db_path: Path) -> bool:
+    """Check DB directory and file permissions. Log warning if insecure.
+    Returns True if permissions need fixing."""
+    needs_fix = False
+    for path, expected_mode in ((db_dir, 0o700), (db_path, 0o600)):
         try:
             if not path.exists():
                 continue
             st = path.stat()
-            if st.st_mode & 0o077:
-                actual = stat.S_IMODE(st.st_mode)
+            actual = stat.S_IMODE(st.st_mode)
+            if actual != expected_mode:
                 _log.warning(
                     "[bifrost] %s has permissive mode %04o, expected %04o — "
                     "DB may contain secrets. Run: chmod %s %04o",
                     path, actual, expected_mode, path, expected_mode,
                 )
+                needs_fix = True
         except OSError:
             pass
+    return needs_fix
 
 
 def _apply_schema(conn: sqlite3.Connection):
@@ -57,10 +59,20 @@ def _apply_schema(conn: sqlite3.Connection):
         existing_version = row[0] if row else 0
 
     if existing_version < SCHEMA_VERSION:
+        # Apply full schema for new tables (CREATE TABLE IF NOT EXISTS handles existing)
         schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
         conn.executescript(schema_sql)
+
+        # Apply additive migrations for existing tables
+        if existing_version <= 1:
+            # Migration v1 → v2: Add author column
+            try:
+                conn.execute("ALTER TABLE memories ADD COLUMN author TEXT")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
         conn.execute(
-            "INSERT OR REPLACE INTO schema_version (version) VALUES (?)",
+            "INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (?, datetime('now'))",
             (SCHEMA_VERSION,),
         )
         conn.commit()
@@ -69,6 +81,7 @@ def _apply_schema(conn: sqlite3.Connection):
 @contextmanager
 def get_db():
     _ensure_dir()
+    _verify_permissions(DB_DIR, DB_PATH)
     _chmod(DB_DIR, 0o700)   # owner-only directory
     with _lock:
         conn = sqlite3.connect(str(DB_PATH))
@@ -79,7 +92,6 @@ def get_db():
         try:
             _apply_schema(conn)
             _chmod(DB_PATH, 0o600)   # owner-only file
-            _verify_permissions()
             yield conn
         finally:
             conn.close()

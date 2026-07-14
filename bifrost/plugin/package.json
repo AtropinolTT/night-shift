@@ -1,12 +1,23 @@
 {
   "name": "bifrost-plugin",
+  "version": "0.2.2",
+  "description": "OpenCode plugin: persistent memory, tool call classifier, goal loop, skill bridge, fusion dispatch, and permission audit.",
+  "license": "MIT",
   "type": "module",
-  "private": true,
+  "keywords": ["opencode-plugin"],
   "exports": {
     ".": {
-      "import": "./index.ts",
-      "types": "./index.ts"
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
     }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist/", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc && cp fusion-skill.md dist/fusion-skill.md",
+    "postbuild": "",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@opencode-ai/plugin": "^1.17.18"

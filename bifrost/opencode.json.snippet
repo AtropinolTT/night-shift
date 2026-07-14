@@ -1,16 +1,14 @@
 {
   "//": "Bifrost — OpenCode plugin that bridges OpenCode agents to a FastMCP companion server",
-  "plugins": {
-    "bifrost": {
-      "//": "Declares the bifrost plugin; OpenCode loads plugin.py from bifrost/plugin/",
-      "enabled": true
-    }
-  },
-  "mcpServers": {
+  "plugin": [
+    "bifrost-plugin"
+  ],
+  "mcp": {
     "bifrost-companion": {
-      "//": "Local stdio MCP server pointing at the Python FastMCP companion entry point",
-      "command": "uv",
-      "args": ["run", "--directory", "bifrost/companion", "server.py"]
+      "type": "local",
+      "//": "Path to the Python FastMCP companion entry point",
+      "command": ["python3", "/absolute/path/to/bifrost/companion/server.py"],
+      "enabled": true
     }
   }
 }

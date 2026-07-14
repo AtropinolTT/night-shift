@@ -614,7 +614,6 @@ DESTRUCTIVE_TOOL_CASES = [
     ("format", {"device": "/dev/sdb"}),
     ("mount", {"device": "/dev/sdc", "mountpoint": "/mnt"}),
     ("unmount", {"mountpoint": "/mnt"}),
-    ("dd", {"if": "/dev/zero", "of": "/workspace/img"}),
     ("mkfs", {"device": "/dev/sdc", "type": "ext4"}),
     ("fdisk", {"device": "/dev/sdb"}),
     ("parted", {"device": "/dev/sdb"}),
@@ -672,6 +671,12 @@ UNKNOWN_TOOL_NAMES = [
     "cmake",
     "bazel",
     "npx",
+    # BUG-10 regression: "dd" was removed from _DESTRUCTIVE_NAME_SUBSTRINGS.
+    # Previously the "dd" substring matched "dd" in _DESTRUCTIVE_NAME_SUBSTRINGS,
+    # falsely DENY'ing any tool whose name contained "dd".  With BUG-10 fixed,
+    # a tool named "dd" must fall through to model dispatch → ASK_USER.
+    # (The bash-level pattern `\bdd\s+if=` still catches destructive dd usage.)
+    "dd",
 ]
 
 

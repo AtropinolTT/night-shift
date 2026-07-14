@@ -1,12 +1,46 @@
 import path from "node:path";
+import fs from "node:fs";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 import type { Hooks, PluginInput, PluginOptions } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin";
 import { MCPRelay } from "./mcp-relay.js";
 import { HealthMonitor } from "./health.js";
+import { logger } from "./logger.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const COMPANION_SCRIPT = path.resolve(__dirname, "..", "companion", "server.py");
+const COMPANION_SCRIPT = process.env.BIFROST_COMPANION_PATH || path.resolve(__dirname, "..", "companion", "server.py");
+
+// ── Global skill installer ──────────────────────────────────────────────
+
+const GLOBAL_SKILLS_DIR = path.join(os.homedir(), ".claude", "skills", "fusion");
+const GLOBAL_SKILL_PATH = path.join(GLOBAL_SKILLS_DIR, "SKILL.md");
+
+/** Install fusion skill to ~/.claude/skills/fusion/SKILL.md so `/fusion` is available globally. Idempotent. */
+function installGlobalFusionSkill(): void {
+  try {
+    const sourcePath = path.resolve(__dirname, "fusion-skill.md");
+    if (!fs.existsSync(sourcePath)) {
+      logger.warn(`[bifrost] fusion-skill.md not found at ${sourcePath} — skipping global install`);
+      return;
+    }
+
+    const content = fs.readFileSync(sourcePath, "utf-8");
+    fs.mkdirSync(GLOBAL_SKILLS_DIR, { recursive: true });
+
+    let existing = "";
+    try { existing = fs.readFileSync(GLOBAL_SKILL_PATH, "utf-8"); } catch { /* first install */ }
+
+    if (existing !== content) {
+      fs.writeFileSync(GLOBAL_SKILL_PATH, content, "utf-8");
+      logger.log(`[bifrost] installed global fusion skill → ${GLOBAL_SKILL_PATH}`);
+    } else {
+      logger.log(`[bifrost] global fusion skill already up to date at ${GLOBAL_SKILL_PATH}`);
+    }
+  } catch (err) {
+    logger.warn(`[bifrost] failed to install global fusion skill (non-fatal):`, err);
+  }
+}
 
 // ── READ_ONLY_TOOLS — MUST KEEP IN SYNC with companion/classifier/classifier.py ──
 const READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
@@ -222,6 +256,281 @@ function formatFusionOutput(result: FusionResult): string {
   return lines.join("\n");
 }
 
+// ── SDK Fusion Dispatch ────────────────────────────────────────────────
+
+/** Model price rates (USD per token, copied from companion/fusion/dispatch.py). */
+const MODEL_RATES: Record<string, [number, number]> = {
+  "deepseek-v4-pro":   [0.002 / 1_000_000, 0.008 / 1_000_000],
+  "deepseek-v4-flash": [0.0002 / 1_000_000, 0.0008 / 1_000_000],
+  "deepseek-v3":       [0.001 / 1_000_000, 0.004 / 1_000_000],
+  "gpt-4o":           [0.005 / 1_000_000, 0.015 / 1_000_000],
+  "claude-sonnet-4":  [0.003 / 1_000_000, 0.015 / 1_000_000],
+  "deepseek-chat":    [0.002 / 1_000_000, 0.008 / 1_000_000],
+  "deepseek-reasoner": [0.002 / 1_000_000, 0.008 / 1_000_000],
+};
+
+/** Rough token count — ~4 chars per token for English text. */
+function approxTokens(text: string): number {
+  return Math.max(1, Math.ceil(text.length / 4));
+}
+
+function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
+  const rates = MODEL_RATES[model] ?? [0, 0];
+  return inputTokens * rates[0] + outputTokens * rates[1];
+}
+
+function modelProviderId(modelId: string): string {
+  if (modelId.startsWith("deepseek")) return "deepseek";
+  if (modelId.startsWith("gpt")) return "openai";
+  if (modelId.startsWith("claude")) return "anthropic";
+  return "deepseek";
+}
+
+const SYNTHESIS_PROMPT_TEMPLATE =
+  "You are a synthesis engine. Given these {n} responses to the original prompt, " +
+  "produce the best combined answer. Consider different perspectives, " +
+  "resolve contradictions, and merge complementary insights into a single " +
+  "coherent response.\n\n" +
+  "--- ORIGINAL PROMPT ---\n{prompt}\n--- END ORIGINAL PROMPT ---\n\n" +
+  "{responses}\n\n" +
+  "--- SYNTHESIS INSTRUCTIONS ---\n" +
+  "1. Identify the strongest claims and evidence from each response.\n" +
+  "2. Note any disagreements and explain which position has better support.\n" +
+  "3. If one response is noticeably weaker, give it less weight.\n" +
+  "4. Produce one unified answer — do NOT present a list of competing answers.\n" +
+  "5. Start your response with: {label}\n";
+
+const FUSION_LABEL = "EXPERIMENTAL — Model Fusion (v1-alpha)";
+const DEFAULT_FUSION_MODELS = ["deepseek-v4-pro", "deepseek-v4-flash"];
+const MAX_FUSION_MODELS = 3;
+const DEFAULT_COST_CEILING = 0.50;
+const TIMEOUT_PER_MODEL_MS = 60_000;
+const POLL_INTERVAL_MS = 500;
+
+interface SessionClient {
+  create(body?: Record<string, unknown>): Promise<{ data?: { id: string } }>;
+  prompt(input: {
+    path?: { id?: string };
+    body?: Record<string, unknown>;
+  }): Promise<unknown>;
+  messages(input: {
+    path?: { id?: string };
+    query?: Record<string, unknown>;
+  }): Promise<{
+    data?: Array<{
+      info?: { role?: string };
+      parts?: Array<{ type?: string; text?: string }>;
+    }>;
+  }>;
+  delete(input: { path?: { id?: string } }): Promise<unknown>;
+}
+
+async function pollForResponse(
+  sessionClient: SessionClient,
+  sessionId: string,
+  timeoutMs: number,
+): Promise<string> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const msgs = await sessionClient.messages({
+      path: { id: sessionId },
+      query: { limit: 10 },
+    });
+    const data = msgs.data ?? [];
+    for (let i = data.length - 1; i >= 0; i--) {
+      const msg = data[i];
+      if (msg.info?.role === "assistant") {
+        const text = msg.parts
+          ?.filter((p) => p.type === "text" && p.text)
+          ?.map((p) => p.text!)
+          ?.join("\n");
+        if (text) return text;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
+  return "";
+}
+
+async function sdkFusionDispatch(
+  client: { session: SessionClient },
+  prompt: string,
+  models?: string[],
+  synthesisModel?: string,
+  costCeiling?: number,
+): Promise<FusionResult> {
+  const resolvedModels = (models?.length ? models.slice(0, MAX_FUSION_MODELS) : null)
+    ?? DEFAULT_FUSION_MODELS;
+  const resolvedSynthesisModel = synthesisModel ?? "deepseek-v4-pro";
+  const resolvedCostCeiling = costCeiling ?? DEFAULT_COST_CEILING;
+  const wallStart = Date.now();
+  const tempSessionIds: string[] = [];
+
+  try {
+    // ── Phase 1: parallel dispatch ───────────────────────────────────
+    const dispatchPromises = resolvedModels.map(async (model) => {
+      const t0 = Date.now();
+      const inputTokens = approxTokens(prompt);
+      let sessionId: string | null = null;
+
+      try {
+        const providerID = modelProviderId(model);
+        const createResult = await client.session.create({
+          body: { model: { id: model, providerID } },
+        });
+        sessionId = (createResult as any).data?.id;
+        if (!sessionId) throw new Error("Failed to create session");
+        tempSessionIds.push(sessionId);
+
+        await client.session.prompt({
+          path: { id: sessionId },
+          body: {
+            parts: [{ type: "text", text: prompt }],
+            model: { providerID, modelID: model },
+          },
+        });
+
+        const responseText = await pollForResponse(
+          client.session,
+          sessionId,
+          TIMEOUT_PER_MODEL_MS,
+        );
+
+        const wallMs = Date.now() - t0;
+        const outputTokens = responseText ? approxTokens(responseText) : 0;
+        const cost = responseText ? estimateCost(model, inputTokens, outputTokens) : 0;
+        const timedOut = !responseText;
+
+        return {
+          model,
+          response: responseText,
+          cost,
+          input_tokens: inputTokens,
+          output_tokens: timedOut ? 0 : outputTokens,
+          wall_time_ms: wallMs,
+          timed_out: timedOut,
+          error: timedOut ? "Timeout waiting for response" : null,
+        };
+      } catch (err) {
+        const wallMs = Date.now() - t0;
+        return {
+          model,
+          response: "",
+          cost: 0,
+          input_tokens: inputTokens,
+          output_tokens: 0,
+          wall_time_ms: wallMs,
+          timed_out: true,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    });
+
+    const results = await Promise.allSettled(dispatchPromises);
+
+    const modelResponses = results.map((r) =>
+      r.status === "fulfilled" ? r.value : {
+        model: "unknown",
+        response: "",
+        cost: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        wall_time_ms: 0,
+        timed_out: true,
+        error: String(r.reason),
+      },
+    );
+
+    const successful = modelResponses.filter((r) => !r.timed_out && r.response);
+    const timedOutModels = modelResponses
+      .filter((r) => r.timed_out)
+      .map((r) => r.model);
+    const cumulativeCost = modelResponses.reduce((sum, r) => sum + r.cost, 0);
+
+    // ── Phase 2: synthesis ───────────────────────────────────────────
+    let fusedAnswer: string;
+    let synthCost = 0;
+
+    if (successful.length > 0) {
+      try {
+        const synthPrompts = successful.map(
+          (r, i) => `=== RESPONSE ${i + 1} (from ${r.model}) ===\n${r.response}\n`,
+        );
+        const synthesisPrompt = SYNTHESIS_PROMPT_TEMPLATE
+          .replace("{n}", String(successful.length))
+          .replace("{prompt}", prompt)
+          .replace("{responses}", synthPrompts.join("\n"))
+          .replace("{label}", FUSION_LABEL);
+
+        const synthProviderID = modelProviderId(resolvedSynthesisModel);
+        const synthCreateResult = await client.session.create({
+          body: {
+            model: { id: resolvedSynthesisModel, providerID: synthProviderID },
+          },
+        });
+        const synthSessionId = (synthCreateResult as any).data?.id;
+        if (!synthSessionId) throw new Error("Failed to create synthesis session");
+        tempSessionIds.push(synthSessionId);
+
+        await client.session.prompt({
+          path: { id: synthSessionId },
+          body: {
+            parts: [{ type: "text", text: synthesisPrompt }],
+            model: { providerID: synthProviderID, modelID: resolvedSynthesisModel },
+          },
+        });
+
+        const synthResponse = await pollForResponse(
+          client.session,
+          synthSessionId,
+          TIMEOUT_PER_MODEL_MS * 2,
+        );
+
+        if (synthResponse) {
+          synthCost = estimateCost(
+            resolvedSynthesisModel,
+            approxTokens(synthesisPrompt),
+            approxTokens(synthResponse),
+          );
+          fusedAnswer = synthResponse.includes(FUSION_LABEL)
+            ? synthResponse
+            : `${FUSION_LABEL}\n\n${synthResponse}`;
+        } else {
+          fusedAnswer = `${FUSION_LABEL}\n\nFusion synthesis failed: timeout waiting for synthesis model.`;
+        }
+      } catch (err) {
+        fusedAnswer =
+          `Fusion synthesis failed: ${err instanceof Error ? err.message : String(err)}`;
+      }
+    } else {
+      fusedAnswer =
+        `${FUSION_LABEL}\n\nFusion failed: all models timed out or returned empty responses.`;
+    }
+
+    const totalCost = cumulativeCost + synthCost;
+    const wallMs = Date.now() - wallStart;
+
+    return {
+      prompt,
+      model_responses: modelResponses,
+      fused_answer: fusedAnswer,
+      cost: Math.round(totalCost * 1e6) / 1e6,
+      wall_time_ms: wallMs,
+      timed_out_models: timedOutModels.length > 0 ? timedOutModels : undefined,
+      label: FUSION_LABEL,
+    };
+  } finally {
+    // ── Clean up ALL temp sessions ────────────────────────────────────
+    for (const sid of tempSessionIds) {
+      try {
+        await client.session.delete({ path: { id: sid } });
+      } catch (err) {
+        logger.warn(`[bifrost] failed to delete temp session ${sid}:`, err);
+      }
+    }
+  }
+}
+
 // ── Goal Loop helpers ──────────────────────────────────────────────────
 
 function formatGoalUsage(): string {
@@ -319,19 +628,18 @@ export default async function bifrostPlugin(
   pluginInput: PluginInput,
   _options?: PluginOptions,
 ): Promise<Hooks> {
+  // Install global fusion skill on every plugin load — idempotent, non-fatal
+  installGlobalFusionSkill();
+
   const relay = new MCPRelay();
   const { client } = pluginInput;
   const monitor = new HealthMonitor(relay);
 
   try {
-    // First arg is pythonPath (use undefined to auto-detect via PATH),
-    // second arg is the script to run. This ensures the validator checks
-    // a real Python binary, not a .py file (which would fail the safe-prefix
-    // check on systems where the project lives outside /home, /usr, /opt).
     await relay.connect(undefined, COMPANION_SCRIPT);
     monitor.start();
   } catch (err) {
-    console.warn("[bifrost] companion not available (non-fatal):", err);
+    logger.warn("[bifrost] companion not available (non-fatal):", err);
   }
 
   return {
@@ -340,17 +648,17 @@ export default async function bifrostPlugin(
       try {
         await relay.disconnect();
       } catch (err) {
-        console.warn("[bifrost] error disconnecting from companion:", err);
+        logger.warn("[bifrost] error disconnecting from companion:", err);
       }
     },
 
     event: async (evt) => {
       try {
         if (evt.event.type === "session.created") {
-          console.log("[bifrost] session created:", evt.event.properties.info);
+          logger.log("[bifrost] session created:", evt.event.properties.info);
         }
       } catch (err) {
-        console.warn("[bifrost] event hook error (non-fatal):", err);
+        logger.warn("[bifrost] event hook error (non-fatal):", err);
       }
     },
 
@@ -374,27 +682,23 @@ export default async function bifrostPlugin(
         );
 
         // ── Handle classification decision ─────────────────────────────
+        // ALL decisions show as chat messages via output.allow/output.reason
         switch (result.decision) {
           case "ALLOW":
-            console.log(
-              `[bifrost] ALLOW ${evt.tool}: ${result.reason}`,
-            );
-            return; // tool executes normally
+            (output as any).allow = true;
+            (output as any).reason =
+              result.reason || `${evt.tool} allowed by classifier`;
+            return;
 
           case "DENY":
-            console.warn(
-              `[bifrost] DENY ${evt.tool}: ${result.reason}`,
-            );
-            throw new Error(
-              `[bifrost] Tool execution blocked: ${evt.tool} — ${result.reason}`,
-            );
+            (output as any).allow = false;
+            (output as any).reason =
+              result.reason || `Tool blocked: ${evt.tool}`;
+            return;
 
           case "ASK_USER":
           default:
             // Unknown/invalid decision → safe fallback to ASK_USER
-            console.log(
-              `[bifrost] ASK_USER ${evt.tool}: ${result.reason}`,
-            );
             (output as any).allow = false;
             (output as any).reason =
               result.reason ||
@@ -403,16 +707,7 @@ export default async function bifrostPlugin(
         }
       } catch (err) {
         // ── Relay error, timeout, or companion unreachable ─────────────
-        // Re-throw DENY errors so agent sees the blocking reason.
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("[bifrost] Tool execution blocked:")) {
-          throw err; // propagate DENY errors
-        }
-
-        // All other errors (connection, timeout, unexpected) → ASK_USER
-        console.warn(
-          `[bifrost] classifier error for ${evt.tool}, defaulting to ASK_USER: ${msg}`,
-        );
+        // Show classifier unavailable message as chat message
         (output as any).allow = false;
         (output as any).reason =
           `[bifrost] Classifier unavailable — user confirmation required for: ${evt.tool}`;
@@ -423,7 +718,7 @@ export default async function bifrostPlugin(
       try {
         output.status = "ask";
       } catch (err) {
-        console.warn("[bifrost] permission.ask error (non-fatal):", err);
+        logger.warn("[bifrost] permission.ask error (non-fatal):", err);
       }
     },
 
@@ -454,24 +749,35 @@ export default async function bifrostPlugin(
             .describe("Maximum USD cost. Default: $0.50"),
         },
         async execute(args, _context) {
-          if (!relay.connected) {
-            return "❌ Bifrost companion is not running. Start `bifrost-companion` to use `/fusion`.";
-          }
           try {
-            const result = await monitor.call<FusionResult>(
-              "fusion_dispatch_tool",
-              {
-                prompt: args.prompt,
-                models: args.models ?? undefined,
-                synthesis_model: args.synthesis_model ?? undefined,
-                cost_ceiling: args.cost_ceiling ?? 0.5,
-              },
-              120_000,
+            const result = await sdkFusionDispatch(
+              client,
+              args.prompt,
+              args.models ?? undefined,
+              args.synthesis_model ?? undefined,
+              args.cost_ceiling ?? 0.5,
             );
             return formatFusionOutput(result);
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            return `❌ /fusion failed: ${msg}`;
+          } catch (_sdkErr) {
+            if (!relay.connected) {
+              return "❌ /fusion failed: SDK dispatch error and companion is not running.";
+            }
+            try {
+              const result = await monitor.call<FusionResult>(
+                "fusion_dispatch_tool",
+                {
+                  prompt: args.prompt,
+                  models: args.models ?? undefined,
+                  synthesis_model: args.synthesis_model ?? undefined,
+                  cost_ceiling: args.cost_ceiling ?? 0.5,
+                },
+                120_000,
+              );
+              return formatFusionOutput(result);
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              return `❌ /fusion failed: ${msg}`;
+            }
           }
         },
       }),
@@ -491,37 +797,37 @@ export default async function bifrostPlugin(
             return;
           }
 
-          if (!relay.connected) {
-            output.parts = [
-              {
-                type: "text" as const,
-                text: "❌ Bifrost companion is not running. Start `bifrost-companion` to use `/fusion`.",
-              },
-            ] as never;
-            return;
-          }
+          const fusionText = await (async (): Promise<string> => {
+            try {
+              const result = await sdkFusionDispatch(
+                client,
+                prompt,
+                undefined,
+                undefined,
+                0.5,
+              );
+              return formatFusionOutput(result);
+            } catch (_sdkErr) {
+              if (!relay.connected) {
+                return "❌ /fusion failed: SDK dispatch error and companion is not running.";
+              }
+              try {
+                const result = await monitor.call<FusionResult>(
+                  "fusion_dispatch_tool",
+                  { prompt, cost_ceiling: 0.5 },
+                  120_000,
+                );
+                return formatFusionOutput(result);
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                return `❌ /fusion failed: ${msg}`;
+              }
+            }
+          })();
 
-          try {
-            const result = await monitor.call<FusionResult>(
-              "fusion_dispatch_tool",
-              { prompt, cost_ceiling: 0.5 },
-              120_000,
-            );
-            output.parts = [
-              {
-                type: "text" as const,
-                text: formatFusionOutput(result),
-              },
-            ] as never;
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            output.parts = [
-              {
-                type: "text" as const,
-                text: `❌ /fusion failed: ${msg}`,
-              },
-            ] as never;
-          }
+          output.parts = [
+            { type: "text" as const, text: fusionText },
+          ] as never;
           return;
         }
 
@@ -582,26 +888,36 @@ export default async function bifrostPlugin(
 
         // ── /review ──────────────────────────────────────────────────
         if (input.command === "review") {
-          const rawArgs = (input.arguments ?? "").trim();
-          const baseRef = rawArgs || "HEAD~1";
-          output.parts = [
-            {
-              type: "text" as const,
-              text: [
-                "╔══════════════════════════════════════════════════════════════╗",
-                "║  🔍  Code Review — Bifrost Review Bridge                      ║",
-                "╚══════════════════════════════════════════════════════════════╝",
-                "",
-                `**Reviewing changes since:** \`${baseRef}\``,
-                "",
-                "Run the `review` skill for a standards-and-spec review,",
-                "or use `git diff` to inspect changes manually.",
-                "",
-                "**Quick check:**",
-                `\`\`\`git diff ${baseRef} --stat\`\`\``,
-              ].join("\n"),
-            },
-          ] as never;
+          if (!relay.connected) {
+            output.parts = [
+              {
+                type: "text" as const,
+                text: "❌ Bifrost companion is not running. Start `bifrost-companion` to use `/review`.",
+              },
+            ] as never;
+            return;
+          }
+
+          try {
+            const result = await monitor.call<string>("skill_load", {
+              name: "review",
+              arguments: {},
+            });
+            output.parts = [
+              {
+                type: "text" as const,
+                text: `🔍 /review — loaded \`review\` skill\n\n${result}`,
+              },
+            ] as never;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            output.parts = [
+              {
+                type: "text" as const,
+                text: `❌ /review failed: ${msg}`,
+              },
+            ] as never;
+          }
           return;
         }
 
@@ -617,24 +933,13 @@ export default async function bifrostPlugin(
             ] as never;
             return;
           }
-          if (!relay.connected) {
-            output.parts = [
-              {
-                type: "text" as const,
-                text: "❌ Bifrost companion is not running. Start `bifrost-companion` to use `/explain`.",
-              },
-            ] as never;
-            return;
-          }
           try {
-            const result = await monitor.call<FusionResult>(
-              "fusion_dispatch_tool",
-              {
-                prompt: `Explain the following code clearly and concisely:\n\n${rawArgs}`,
-                models: ["deepseek-v4-pro"],
-                cost_ceiling: 0.1,
-              },
-              60_000,
+            const result = await sdkFusionDispatch(
+              client,
+              `Explain the following code clearly and concisely:\n\n${rawArgs}`,
+              ["deepseek-v4-pro"],
+              undefined,
+              0.1,
             );
             output.parts = [
               {
@@ -656,111 +961,182 @@ export default async function bifrostPlugin(
 
         // ── /commit ──────────────────────────────────────────────────
         if (input.command === "commit") {
-          const rawArgs = (input.arguments ?? "").trim();
-          output.parts = [
-            {
-              type: "text" as const,
-              text: [
-                "╔══════════════════════════════════════════════════════════════╗",
-                "║  📝  Smart Commit — Bifrost Commit Bridge                    ║",
-                "╚══════════════════════════════════════════════════════════════╝",
-                "",
-                "**Usage:** `/commit` or `/commit \"custom message\"`",
-                "",
-                "Use the `git-master` skill for atomic commits with proper messages.",
-                rawArgs
-                  ? `**Message:** "${rawArgs}"`
-                  : "**No message provided** — the agent will generate one from staged changes.",
-              ].join("\n"),
-            },
-          ] as never;
+          if (!relay.connected) {
+            output.parts = [
+              {
+                type: "text" as const,
+                text: "❌ Bifrost companion is not running. Start `bifrost-companion` to use `/commit`.",
+              },
+            ] as never;
+            return;
+          }
+
+          try {
+            const result = await monitor.call<string>("skill_load", {
+              name: "git-master",
+              arguments: {},
+            });
+            output.parts = [
+              {
+                type: "text" as const,
+                text: `📝 /commit — loaded \`git-master\` skill\n\n${result}`,
+              },
+            ] as never;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            output.parts = [
+              {
+                type: "text" as const,
+                text: `❌ /commit failed: ${msg}`,
+              },
+            ] as never;
+          }
           return;
         }
 
         // ── /test ──────────────────────────────────────────────────
         if (input.command === "test") {
-          const rawArgs = (input.arguments ?? "").trim();
-          output.parts = [
-            {
-              type: "text" as const,
-              text: [
-                "╔══════════════════════════════════════════════════════════════╗",
-                "║  🧪  Test Runner — Bifrost Test Bridge                       ║",
-                "╚══════════════════════════════════════════════════════════════╝",
-                "",
-                "**Usage:** `/test [test file or pattern]`",
-                "",
-                rawArgs
-                  ? `**Target:** \`${rawArgs}\``
-                  : "**No target specified** — use `tdd` skill for red-green-refactor workflow.",
-                "",
-                "**Quick run:**",
-                "```bash",
-                rawArgs
-                  ? `python -m pytest ${rawArgs} -v`
-                  : "python -m pytest tests/ -v",
-                "```",
-              ].join("\n"),
-            },
-          ] as never;
+          if (!relay.connected) {
+            output.parts = [
+              {
+                type: "text" as const,
+                text: "❌ Bifrost companion is not running. Start `bifrost-companion` to use `/test`.",
+              },
+            ] as never;
+            return;
+          }
+
+          try {
+            const result = await monitor.call<string>("skill_load", {
+              name: "tdd",
+              arguments: {},
+            });
+            output.parts = [
+              {
+                type: "text" as const,
+                text: `🧪 /test — loaded \`tdd\` skill\n\n${result}`,
+              },
+            ] as never;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            output.parts = [
+              {
+                type: "text" as const,
+                text: `❌ /test failed: ${msg}`,
+              },
+            ] as never;
+          }
           return;
         }
 
         // ── /audit-permissions ─────────────────────────────────────────
-        if (input.command !== "audit-permissions") return;
+        if (input.command === "audit-permissions") {
+          const arg = (input.arguments ?? "").trim();
+          const sourcePath = arg || "~/.claude/settings.json";
 
-        const arg = (input.arguments ?? "").trim();
-        const sourcePath = arg || "~/.claude/settings.json";
+          if (!relay.connected) {
+            output.parts = [{
+              type: "text",
+              text: "⚠️  Bifrost companion is not running. Start the companion server to use /audit-permissions.",
+            }] as never;
+            return;
+          }
 
-        if (!relay.connected) {
-          output.parts = [{
-            type: "text",
-            text: "⚠️  Bifrost companion is not running. Start the companion server to use /audit-permissions.",
-          }] as never;
+          const result = await monitor.call<string>("config_migrate", {
+            source_path: sourcePath,
+          });
+
+          const isToolError =
+            typeof result === "string" &&
+            (result.startsWith("No Claude Code config found at") ||
+              result.startsWith("Error reading") ||
+              result.startsWith("Error parsing"));
+
+          if (isToolError) {
+            output.parts = [{ type: "text", text: `❌ ${result}` }] as never;
+            return;
+          }
+
+          const formatted = [
+            "╔══════════════════════════════════════════════════════════════╗",
+            "║  ⚠️  DO NOT AUTO-APPLY — REVIEW MANUALLY                   ║",
+            "║  This is a READ-ONLY audit. Copy sections you need.         ║",
+            "╚══════════════════════════════════════════════════════════════╝",
+            "",
+            result,
+            "",
+            "──────────────────────────────────────────────────────────────",
+            "⚠️  REMINDER: Review each section manually before applying.",
+            "   This tool does NOT modify any files.",
+          ].join("\n");
+
+          output.parts = [{ type: "text", text: formatted }] as never;
           return;
         }
 
-        const result = await monitor.call<string>("config_migrate", {
-          source_path: sourcePath,
-        });
-
-        const isToolError =
-          typeof result === "string" &&
-          (result.startsWith("No Claude Code config found at") ||
-            result.startsWith("Error reading") ||
-            result.startsWith("Error parsing"));
-
-        if (isToolError) {
-          output.parts = [{ type: "text", text: `❌ ${result}` }] as never;
-          return;
-        }
-
-        const formatted = [
-          "╔══════════════════════════════════════════════════════════════╗",
-          "║  ⚠️  DO NOT AUTO-APPLY — REVIEW MANUALLY                   ║",
-          "║  This is a READ-ONLY audit. Copy sections you need.         ║",
-          "╚══════════════════════════════════════════════════════════════╝",
-          "",
-          result,
-          "",
-          "──────────────────────────────────────────────────────────────",
-          "⚠️  REMINDER: Review each section manually before applying.",
-          "   This tool does NOT modify any files.",
-        ].join("\n");
-
-        output.parts = [{ type: "text", text: formatted }] as never;
+        // ── Default: unknown command ──────────────────────────────────
+        output.parts = [
+          {
+            type: "text" as const,
+            text: `Unknown command: ${input.command}. Available commands: fusion, goal, review, explain, commit, test, audit-permissions`,
+          },
+        ] as never;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        output.parts = [{
-          type: "text",
-          text: `❌ /audit-permissions failed: ${msg}`,
-        }] as never;
+        output.parts = [
+          {
+            type: "text" as const,
+            text: `❌ Command failed: ${msg}`,
+          },
+        ] as never;
+      }
+    },
+
+    // ── slash command interception via chat.message (OpenCode routes user-typed
+    //    /fusion and /goal through this hook, NOT command.execute.before) ──
+    "chat.message": async (input, output) => {
+      const text = (output.parts?.find(p => p.type === "text") as any)?.text ?? "";
+      if (!text.startsWith("/fusion") && !text.startsWith("/goal")) return;
+
+      try {
+        if (text.startsWith("/fusion")) {
+          const rawArgs = text.slice("/fusion".length).trim();
+          const prompt = rawArgs.replace(/^["']|["']$/g, "").trim();
+          if (!prompt) {
+            output.parts = [{ type: "text" as const, text: formatUsage() }] as never;
+            return;
+          }
+          const result = await sdkFusionDispatch(client, prompt, undefined, undefined, 0.5);
+          output.parts = [{ type: "text" as const, text: formatFusionOutput(result) }] as never;
+          return;
+        }
+
+        if (text.startsWith("/goal")) {
+          const rawArgs = text.slice("/goal".length).trim();
+          const goal = rawArgs.replace(/^["']|["']$/g, "").trim();
+          if (!goal) {
+            output.parts = [{ type: "text" as const, text: formatGoalUsage() }] as never;
+            return;
+          }
+          if (!relay.connected) {
+            output.parts = [{ type: "text" as const, text: "❌ Bifrost companion is not running to use `/goal`." }] as never;
+            return;
+          }
+          const result = await monitor.call<GoalLoopResult>("goal_loop", {
+            goal, actions: [{ tool_name: "Read", tool_args: {}, estimated_cost: 0.01 }],
+          }, 30_000);
+          output.parts = [{ type: "text" as const, text: formatGoalOutput(result) }] as never;
+          return;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        output.parts = [{ type: "text" as const, text: `❌ Command failed: ${msg}` }] as never;
       }
     },
 
     "experimental.session.compacting": async (evt, output) => {
       try {
-        console.log("[bifrost] session compacting:", evt.sessionID);
+        logger.log("[bifrost] session compacting:", evt.sessionID);
 
         if (!relay.connected) return;
 
@@ -790,9 +1166,9 @@ export default async function bifrostPlugin(
           project_hash: "",
         });
 
-        console.log("[bifrost] auto-saved decision memory on compacting");
+        logger.log("[bifrost] auto-saved decision memory on compacting");
       } catch (err) {
-        console.warn("[bifrost] experimental.session.compacting error (non-fatal):", err);
+        logger.warn("[bifrost] experimental.session.compacting error (non-fatal):", err);
       }
     },
 
@@ -802,7 +1178,7 @@ export default async function bifrostPlugin(
         const elapsed = e.elapsedMs ?? 0;
         const error = e.error;
         const status = error ? "FAIL" : "OK";
-        console.log(
+        logger.log(
           `[bifrost] tool.execute.after ${evt.tool} → ${status} (${elapsed}ms)`,
         );
 
@@ -815,7 +1191,7 @@ export default async function bifrostPlugin(
           });
         }
       } catch (err) {
-        console.warn("[bifrost] tool.execute.after error (non-fatal):", err);
+        logger.warn("[bifrost] tool.execute.after error (non-fatal):", err);
       }
     },
   };

@@ -140,3 +140,41 @@ def check_learned_rules() -> list[dict[str, Any]]:
         db.commit()
 
     return new_rules
+
+
+def check_active_learned_rules(tool_name: str, tool_args: dict) -> dict | None:
+    """Check learned_rules for active matching rule.
+
+    Looks up the ``learned_rules`` table for rows with ``status='active'``
+    whose ``tool_pattern`` matches *tool_name* (exact match or wildcard
+    ``'*'``).  Returns the first match found.
+
+    Simple string matching is used for now — pattern matching can be
+    enhanced later (e.g. glob / regex patterns on tool_args).
+
+    Parameters
+    ----------
+    tool_name:
+        Name of the tool being classified (e.g. ``"Bash"``, ``"Write"``).
+    tool_args:
+        Tool arguments dict (reserved for future pattern matching).
+
+    Returns
+    -------
+    dict or None
+        ``{"decision": "ALLOW"|"DENY", "rule_id": int}`` when an active
+        rule matches, or ``None`` when no active rule covers this tool.
+    """
+    with get_db() as db:
+        rows = db.execute(
+            """SELECT id, tool_pattern, learned_decision
+               FROM learned_rules
+               WHERE status = 'active'
+                 AND (tool_pattern = ? OR tool_pattern = '*')""",
+            (tool_name,),
+        ).fetchall()
+
+    for row in rows:
+        return {"decision": row["learned_decision"], "rule_id": row["id"]}
+
+    return None

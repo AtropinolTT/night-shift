@@ -1,4 +1,5 @@
 import { MCPRelay, ConnectionError } from "./mcp-relay.js";
+import { logger } from "./logger.js";
 
 export interface HealthCheckConfig {
   intervalMs: number;
@@ -94,7 +95,7 @@ export class HealthMonitor {
       this.consecutiveFailures = 0;
     } catch (err) {
       this.consecutiveFailures++;
-      console.warn(
+      logger.warn(
         `[health] check #${this.consecutiveFailures} failed: ${(err as Error).message}`,
       );
 
@@ -108,7 +109,7 @@ export class HealthMonitor {
 
   private async restart(): Promise<void> {
     if (this.restartsThisSession >= this.config.maxRestarts) {
-      console.error(
+      logger.error(
         `[health] max restarts (${this.config.maxRestarts}) reached — not retrying`,
       );
       return;
@@ -124,7 +125,7 @@ export class HealthMonitor {
         this.queue.push({
           tool: (p.name ?? pending.method) as string,
           args: (p.arguments as Record<string, unknown>) ?? {},
-          timeoutMs: 10_000,
+          timeoutMs: pending.timeoutMs ?? 10_000,
           resolve: pending.resolve,
           reject: pending.reject,
         });
@@ -140,11 +141,11 @@ export class HealthMonitor {
         this.relay.companionScriptPath,
       );
       this.consecutiveFailures = 0;
-      console.log(
+      logger.log(
         `[health] restart #${this.restartsThisSession} completed`,
       );
     } catch (err) {
-      console.error(
+      logger.error(
         `[health] restart #${this.restartsThisSession} failed: ${(err as Error).message}`,
       );
       const failQueue = this.queue.splice(0);

@@ -298,7 +298,7 @@ class TestSubstitutionCorrectness:
 
     def test_shell_exec_detected_and_raised(self) -> None:
         """Skills with ``!`cmd``` raise ``ShellExecProhibited``."""
-        self._write_skill("subshell", "Execute: `!rm -rf /`")
+        self._write_skill("subshell", "Execute: !`rm -rf /`")
         with pytest.raises(ShellExecProhibited, match="subshell"):
             load_skill("subshell")
 

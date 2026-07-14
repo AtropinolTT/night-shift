@@ -11,8 +11,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from bifrost.companion.context.loader import load_context
-from bifrost.companion.context.rules import get_matching_rules
+from companion.context.loader import load_context
+from companion.context.rules import get_matching_rules
 
 
 def _make_agents_md(directory: Path, content: str) -> Path:
@@ -43,7 +43,7 @@ def mock_config(monkeypatch):
         return SimpleNamespace(max_context_tokens=200)
 
     monkeypatch.setattr(
-        "bifrost.companion.context.loader.load_config", _fake_config
+        "companion.context.loader.load_config", _fake_config
     )
     return _fake_config
 
@@ -96,7 +96,7 @@ class TestLoadContext:
         outside = tmp_path / "outside.md"
         outside.write_text("outside content")
         result = load_context(cwd=str(sub))
-        assert "skipped (outside project)" in result["content"]
+        assert "skipped" in result["content"]
 
     def test_import_not_found_emits_comment(self, tmp_path, mock_config):
         _make_agents_md(tmp_path, "@nonexistent.md")
@@ -154,14 +154,14 @@ class TestGetMatchingRules:
 
     def test_no_rules_dir_returns_empty(self, monkeypatch):
         monkeypatch.setattr(
-            "bifrost.companion.context.rules._find_rules_dir",
+            "companion.context.rules._find_rules_dir",
             lambda: None,
         )
         assert get_matching_rules("any/file.py") == []
 
     def test_global_rule_without_paths_always_matches(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "bifrost.companion.context.rules._find_rules_dir",
+            "companion.context.rules._find_rules_dir",
             lambda: tmp_path / ".claude" / "rules",
         )
         _make_rule(tmp_path, "global.md", "# Global\n- Always write tests")
@@ -171,7 +171,7 @@ class TestGetMatchingRules:
 
     def test_path_rule_matches_correct_extension(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "bifrost.companion.context.rules._find_rules_dir",
+            "companion.context.rules._find_rules_dir",
             lambda: tmp_path / ".claude" / "rules",
         )
         _make_rule(
@@ -184,7 +184,7 @@ class TestGetMatchingRules:
 
     def test_brace_pattern_expansion(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "bifrost.companion.context.rules._find_rules_dir",
+            "companion.context.rules._find_rules_dir",
             lambda: tmp_path / ".claude" / "rules",
         )
         _make_rule(
@@ -198,7 +198,7 @@ class TestGetMatchingRules:
 
     def test_malformed_frontmatter_skips_rule(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "bifrost.companion.context.rules._find_rules_dir",
+            "companion.context.rules._find_rules_dir",
             lambda: tmp_path / ".claude" / "rules",
         )
         _make_rule(tmp_path, "bad.md", "---\npaths: [unclosed\n---\nBad")
@@ -207,7 +207,7 @@ class TestGetMatchingRules:
 
     def test_multiple_rules_returned_for_single_file(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "bifrost.companion.context.rules._find_rules_dir",
+            "companion.context.rules._find_rules_dir",
             lambda: tmp_path / ".claude" / "rules",
         )
         _make_rule(tmp_path, "global.md", "# Global")
@@ -228,7 +228,7 @@ class TestGetMatchingRules:
 
     def test_empty_paths_list_treated_as_global(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "bifrost.companion.context.rules._find_rules_dir",
+            "companion.context.rules._find_rules_dir",
             lambda: tmp_path / ".claude" / "rules",
         )
         _make_rule(

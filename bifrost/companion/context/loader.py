@@ -134,7 +134,7 @@ def _load_with_imports(
             import os as _os
             try:
                 _os.open(str(imported), _os.O_RDONLY | _os.O_NOFOLLOW)
-            except (OSError, AttributeError) as e:
+            except (OSError, AttributeError):
                 # Windows lacks O_NOFOLLOW; use lstat to detect symlink
                 try:
                     if hasattr(_os.path, "islink") and _os.path.islink(str(imported)):
@@ -211,6 +211,13 @@ def load_context(cwd: str | Path | None = None) -> dict:
         if fp is None or not fp.exists():
             continue
         if fp.name.endswith(".local.md"):
+            continue
+        # Reject oversized user-level AGENTS.md (DoS defense)
+        _MAX_CONTEXT_FILE_SIZE = 1_048_576  # 1MB
+        try:
+            if fp.stat().st_size > _MAX_CONTEXT_FILE_SIZE:
+                continue
+        except OSError:
             continue
         content, sources = _load_with_imports(fp, project_root)
         if content:

@@ -41,7 +41,7 @@ SKILL_SEARCH_PATHS: list[Path] = [
 
 # ── regex constants ───────────────────────────────────────────────────────
 
-_SHELL_EXEC_RE = re.compile(r"`![^`]*`")
+_SHELL_EXEC_RE = re.compile(r"!`[^`]*`")
 _ENV_VAR_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 
 # Sentinels for escaped dollar-sign round-trip
@@ -95,12 +95,17 @@ def _parse_frontmatter(content: str) -> tuple[dict[str, Any], str]:
         ``(frontmatter_dict, body_string)``.  If no frontmatter is
         present (or YAML is malformed) the dict will be empty.
     """
+    content = content.replace("\r\n", "\n").replace("\r", "\n")
+
     if not content.startswith("---\n"):
         return {}, content
 
     end = content.find("\n---\n", 4)
     if end == -1:
-        return {}, content
+        # Empty frontmatter: "---\n---\nBody"
+        end = content.find("\n---\n")
+        if end == -1:
+            return {}, content
 
     frontmatter_yaml = content[4:end]
     try:
@@ -166,7 +171,7 @@ def load_skill(
 
     # ── locate & read ──────────────────────────────────────────────────
     skill_path = _find_skill_path(name)
-    raw = skill_path.read_text()
+    raw = skill_path.read_text(encoding="utf-8")
     frontmatter, body = _parse_frontmatter(raw)
 
     # ── security: detect shell exec ────────────────────────────────────
@@ -199,6 +204,12 @@ def load_skill(
 
     # ── positional: $0, $1, $2, ... ────────────────────────────────────
     def _sub_positional(match: re.Match[str]) -> str:
+        # Skip dollar amounts like $1, $0.01, $12/mo — only substitute
+        # bare $N followed by whitespace, end-of-string, or punctuation
+        # (not /, ., or another digit)
+        nxt = match.end()
+        if nxt < len(body) and body[nxt] not in (" ", "\t", "\n", "\r", ",", ";", ":", "!", "?", ")", "]", "}"):
+            return match.group(0)
         idx = int(match.group(1))
         return _lookup(idx, label=f"${idx}")
 

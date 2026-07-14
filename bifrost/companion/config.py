@@ -17,7 +17,6 @@ import yaml
 
 DEFAULTS: dict[str, Any] = {
     "model_for_classifier": "deepseek-v4-flash",
-    "model_for_fusion_synthesis": "deepseek-v4-pro",
     "max_context_tokens": 8000,
     "max_turns_default": 10,
     "cost_ceiling_default": 1.00,

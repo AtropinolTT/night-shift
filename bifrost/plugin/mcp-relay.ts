@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { logger } from "./logger.js";
 
 // ── Errors ────────────────────────────────────────────────────────────────
 
@@ -36,7 +37,7 @@ const DEFAULT_CB_THRESHOLD = 5;
 const DEFAULT_CB_RESET_MS = 30_000; // 30 seconds
 const DEFAULT_CB_HALF_OPEN_TIMEOUT_MS = 5_000;
 
-class CircuitBreaker {
+export class CircuitBreaker {
   private state: CircuitBreakerState = {
     state: "closed",
     failureCount: 0,
@@ -220,7 +221,7 @@ function detectPython(): string {
  * - When the resolved path is a symlink, verifies the symlink target is
  *   also inside a safe directory
  */
-async function validatePythonPath(pythonPath: string): Promise<void> {
+export async function validatePythonPath(pythonPath: string): Promise<void> {
   if (typeof pythonPath !== "string" || pythonPath.length === 0) {
     throw new ConnectionError(
       "Refusing to spawn Python: invalid path (empty or non-string): " +
@@ -242,7 +243,8 @@ async function validatePythonPath(pythonPath: string): Promise<void> {
     }
   }
   // Build safe prefix list once (used for both absolute path check and symlink target check)
-  const safePrefixesPosix = ["/usr/bin/", "/usr/local/bin/", "/opt/", "/home/"];
+  const homeDir = process.env.HOME || process.env.USERPROFILE || "/home";
+  const safePrefixesPosix = ["/usr/bin/", "/usr/local/bin/", "/opt/", homeDir + "/"];
   const safePrefixesWin = [
     "C:\\Python",
     "C:\\Program Files\\Python",
@@ -325,7 +327,7 @@ export class MCPRelay {
 
     this.proc = spawn(resolvedPythonPath, args, {
       stdio: ["pipe", "pipe", "inherit"],
-      env: { ...process.env, PYTHONUNBUFFERED: "1" },
+      env: { ...process.env, PYTHONUNBUFFERED: "1", PYTHONDONTWRITEBYTECODE: "1" },
     });
 
     this.proc.stdout!.on("data", (chunk: Buffer) => {
@@ -463,7 +465,7 @@ export class MCPRelay {
       try {
         msg = JSON.parse(trimmed) as JSONRPCResponse;
       } catch {
-        console.warn("[bifrost] malformed JSON line in MCP buffer, skipping:", trimmed.slice(0, 80));
+        logger.warn("[bifrost] malformed JSON line in MCP buffer, skipping:", trimmed.slice(0, 80));
         continue;
       }
       if (msg.id != null && this.pending.has(msg.id)) {

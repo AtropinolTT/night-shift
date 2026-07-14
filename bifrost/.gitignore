@@ -13,6 +13,9 @@ bifrost.db
 # Node modules
 node_modules/
 
+# Plugin build output
+plugin/dist/
+
 # OpenCode / agent metadata
 .omo/
 .agents/

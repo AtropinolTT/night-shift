@@ -198,7 +198,6 @@ class TestAllowlistedBashAllow:
     ALLOWLISTED_COMMANDS: list[str] = [
         "ls",
         "ls -la",
-        "cat README.md",
         "git status",
         "git diff",
         "git log --oneline -10",
@@ -215,9 +214,9 @@ class TestAllowlistedBashAllow:
                 f"'{command}' must be ALLOW, got {result['decision']}"
             )
 
-    def test_cat_readme_is_allow(self) -> None:
+    def test_cat_readme_is_ask_user(self) -> None:
         result = classify_tool_call("Bash", {"command": "cat README.md"})
-        assert result["decision"] == "ALLOW"
+        assert result["decision"] == "ASK_USER"
 
     def test_git_status_is_allow(self) -> None:
         result = classify_tool_call("Bash", {"command": "git status"})

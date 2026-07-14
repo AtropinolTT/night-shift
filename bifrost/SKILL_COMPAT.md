@@ -5,7 +5,7 @@ through argument substitution (`$0`/`$NAME`) with zero shell exec.
 
 ---
 
-## Verified Skills (10)
+## Verified Skills (9)
 
 Each skill below has been manually audited by reading its `SKILL.md` source.
 Verification criteria:
@@ -21,22 +21,21 @@ Verification criteria:
 
 | # | Name | Category | Verified Features | Limitations | Shell Exec | Status |
 |---|---|---|---|---|---|---|
-| 1 | `dl-tuning-playbook` | Deep Learning / Training | Diagnosis (NaN, overfitting, plateau), systematic tuning workflow (7-step), Adam tuning budget, quick-reference table, compute-bound strategy. All guidance derived from Google's Tuning Playbook. Reference files: `playbook.md`, `diagnosis-flows.md`, `tuning-workflows.md`. | Guidance only — no model execution. Requires user to provide framework/model/optimizer details. Reference files stored alongside skill. | NONE | ✅ Verified |
-| 2 | `caveman` | Communication / Style | Token-efficient communication (~75% reduction). Persistence across turns. Auto-clarity exception for security warnings and destructive ops. Fragment-based response patterns. Self-contained: no external dependencies. | Style override only — must be explicitly disabled (`stop caveman`). Does not modify tool behavior, only prose output. | NONE | ✅ Verified |
-| 3 | `diagnose` | Debugging / Engineering | 6-phase disciplined debugging loop: feedback loop construction (10 methods), reproduce, hypothesize (3-5 falsifiable), instrument (one variable at a time), fix + regression test, cleanup + post-mortem. Domain glossary and ADR awareness. | Methodology only — no automated debugging. Requires user interaction for hypothesis confirmation. References external skills (`improve-codebase-architecture`) for architectural recommendations. | NONE | ✅ Verified |
-| 4 | `handoff` | Session Management | Conversation compaction to handoff document. Suggested skills section. Sensitive info redaction. Context-aware via `argument-hint`. Writes to OS temp directory (not workspace). | Documentation generation only — no state transfer. Relies on existing artifacts (PRDs, plans, ADRs) for references. | NONE | ✅ Verified |
-| 5 | `grill-me` | Design / Planning | Relentless design interview — walks decision tree branches one question at a time. Recommends answers per question. Falls back to codebase exploration when answerable from code. | Interactive only — requires user engagement. No automated design generation. Question output depends on user's plan quality. | NONE | ✅ Verified |
-| 6 | `ara-manager` | Research / Project Management | Full ARA project lifecycle: init, status, briefing, tree visualization, logging (decisions/experiments/dead-ends/pivots/questions), claim management (add/crystallize/advance/revise), structural validation (Seal Level 1, 17 checks), epistemic review delegation (Seal Level 2), compilation from external inputs, architecture improvement. 18 commands. References companion skills: `rigor-reviewer`, `improve-codebase-architecture`, `compiler`. | Complex skill — 892 lines. Uses `$ARGUMENTS` and `$ARA_DIR` variable substitution (Bifrost-compatible). Delegates to external skills for review/architecture. `allowed-tools` restricts to specific Bash patterns. `organize` sub-command delegates to an external JavaScript workflow file. | NONE | ✅ Verified |
-| 7 | `nature-polishing` | Academic Writing | Dynamic routing to static fragments based on detected axes (paper_type, section, language, journal). 5-step routing protocol: manifest load, axis detection, fragment load, polish with priority cascade, on-demand reference access. LaTeX layout/typesetting fix mode (float placement, page density, multi-panel arrangement). Covers: Nature/Nat-Comms/generic journals, research/methods/hypothesis/algorithmic/review paper types, Chinese-to-English translation. | Static fragment files must be present alongside SKILL.md (under `static/` and `references/`). Requires user-provided draft text. Journal-specific patterns limited to Nature-family journals. | NONE | ✅ Verified |
-| 8 | `feishu-kb` | Knowledge Management | Three-mode operation (qa/maintain/update) aligned with Karpathy LLM Wiki pattern. QA: 4-folder scoped search, PDF parsing, citation following (5-layer), comparison detection. Maintain: dedup, lint, frontmatter backfill, KG scaffold, KB log append, IM reporting. Update: 4-source paper search (NCBI/CrossRef/Semantic/arXiv) + RSS polling, dedup, journal filtering, paper doc creation. Subagent architecture (librarian/maintainer/collector). | Requires Feishu API credentials (lark-cli OAuth). Requires conda environment `marker` with pdfplumber + pymupdf. External lark-cli npm package. Write operations use lark-cli — the skill documents these as Bash commands in code blocks, not inline exec. Self-check script must pass before any operation. Karpathy schema features (enforcement, auto-KG) deferred to future versions. | NONE | ✅ Verified |
-| 9 | `night-shift` | Job Scheduling | DeepSeek V4 pricing-aware job scheduler. Commands: submit, status, run, hold, retry, config. Deterministic scripts (check-window, estimate-cost, parse-queue). Model routing matrix (window x model-hint x job-type). Dispatch protocol: pre-flight, concurrency guard (`<!-- dispatching -->` annotation), model selection, execute (Workflow tool), post-dispatch. Autonomy levels L2 (assisted) and L3 (unattended). Cron-based scheduled dispatch with teardown/recreate on config change. Rationalization counter-table for anti-patterns. | Requires `~/.claude/night-shift/` config files (pricing.json, config.json, state.json). Scripts under `scripts/` must be present. Workflow tool used for dispatch — JavaScript functions reference `agent()` and `Workflow()` which are tool-call syntax, not shell exec. Cron integration uses `CronCreate`/`CronList`/`ScheduleWakeup` tool calls. | NONE | ✅ Verified |
-| 10 | `ai-galaxy` | Cloud / Infrastructure | AI Galaxy (智星云) GPU cloud management. SSH/SFTP connections via Python paramiko (`ssh_connector.py`). Instance management via REST API (list, status, start/stop, create, resize, renew). Training job submission using `invoke_shell()` for background processes. Job monitoring via `exec_command()`. File transfer via SFTP + SCP. GPU monitoring (`nvidia-smi`). Screen-based long-running tasks. Docker GPU jobs. Troubleshooting guides for SSH, instance, disk, module, and training issues. | Requires user-provided credentials: instance IP, SSH port, password. Requires Python paramiko library. `ssh_connector.py` helper at `<skill-base>/scripts/`. All shell commands are documented as examples in code blocks — no inline exec. REST API requires AccessKey signature authentication. | NONE | ✅ Verified |
+| 1 | `caveman` | Communication / Style | Token-efficient communication (~75% reduction). Persistence across turns. Auto-clarity exception for security warnings and destructive ops. Fragment-based response patterns. Self-contained: no external dependencies. | Style override only — must be explicitly disabled (`stop caveman`). Does not modify tool behavior, only prose output. | NONE | ✅ Verified |
+| 2 | `diagnose` | Debugging / Engineering | 6-phase disciplined debugging loop: feedback loop construction (10 methods), reproduce, hypothesize (3-5 falsifiable), instrument (one variable at a time), fix + regression test, cleanup + post-mortem. Domain glossary and ADR awareness. | Methodology only — no automated debugging. Requires user interaction for hypothesis confirmation. References external skills (`improve-codebase-architecture`) for architectural recommendations. | NONE | ✅ Verified |
+| 3 | `handoff` | Session Management | Conversation compaction to handoff document. Suggested skills section. Sensitive info redaction. Context-aware via `argument-hint`. Writes to OS temp directory (not workspace). | Documentation generation only — no state transfer. Relies on existing artifacts (PRDs, plans, ADRs) for references. | NONE | ✅ Verified |
+| 4 | `grill-me` | Design / Planning | Relentless design interview — walks decision tree branches one question at a time. Recommends answers per question. Falls back to codebase exploration when answerable from code. | Interactive only — requires user engagement. No automated design generation. Question output depends on user's plan quality. | NONE | ✅ Verified |
+| 5 | `ara-manager` | Research / Project Management | Full ARA project lifecycle: init, status, briefing, tree visualization, logging (decisions/experiments/dead-ends/pivots/questions), claim management (add/crystallize/advance/revise), structural validation (Seal Level 1, 17 checks), epistemic review delegation (Seal Level 2), compilation from external inputs, architecture improvement. 18 commands. References companion skills: `rigor-reviewer`, `improve-codebase-architecture`, `compiler`. | Complex skill — 892 lines. Uses `$ARGUMENTS` and `$ARA_DIR` variable substitution (Bifrost-compatible). Delegates to external skills for review/architecture. `allowed-tools` restricts to specific Bash patterns. `organize` sub-command delegates to an external JavaScript workflow file. | NONE | ✅ Verified |
+| 6 | `nature-polishing` | Academic Writing | Dynamic routing to static fragments based on detected axes (paper_type, section, language, journal). 5-step routing protocol: manifest load, axis detection, fragment load, polish with priority cascade, on-demand reference access. LaTeX layout/typesetting fix mode (float placement, page density, multi-panel arrangement). Covers: Nature/Nat-Comms/generic journals, research/methods/hypothesis/algorithmic/review paper types, Chinese-to-English translation. | Static fragment files must be present alongside SKILL.md (under `static/` and `references/`). Requires user-provided draft text. Journal-specific patterns limited to Nature-family journals. | NONE | ✅ Verified |
+| 7 | `feishu-kb` | Knowledge Management | Three-mode operation (qa/maintain/update) aligned with Karpathy LLM Wiki pattern. QA: 4-folder scoped search, PDF parsing, citation following (5-layer), comparison detection. Maintain: dedup, lint, frontmatter backfill, KG scaffold, KB log append, IM reporting. Update: 4-source paper search (NCBI/CrossRef/Semantic/arXiv) + RSS polling, dedup, journal filtering, paper doc creation. Subagent architecture (librarian/maintainer/collector). | Requires Feishu API credentials (lark-cli OAuth). Requires conda environment `marker` with pdfplumber + pymupdf. External lark-cli npm package. Write operations use lark-cli — the skill documents these as Bash commands in code blocks, not inline exec. Self-check script must pass before any operation. Karpathy schema features (enforcement, auto-KG) deferred to future versions. | NONE | ✅ Verified |
+| 8 | `night-shift` | Job Scheduling | DeepSeek V4 pricing-aware job scheduler. Commands: submit, status, run, hold, retry, config. Deterministic scripts (check-window, estimate-cost, parse-queue). Model routing matrix (window x model-hint x job-type). Dispatch protocol: pre-flight, concurrency guard (`<!-- dispatching -->` annotation), model selection, execute (Workflow tool), post-dispatch. Autonomy levels L2 (assisted) and L3 (unattended). Cron-based scheduled dispatch with teardown/recreate on config change. Rationalization counter-table for anti-patterns. | Requires `~/.claude/night-shift/` config files (pricing.json, config.json, state.json). Scripts under `scripts/` must be present. Workflow tool used for dispatch — JavaScript functions reference `agent()` and `Workflow()` which are tool-call syntax, not shell exec. Cron integration uses `CronCreate`/`CronList`/`ScheduleWakeup` tool calls. | NONE | ✅ Verified |
+| 9 | `ai-galaxy` | Cloud / Infrastructure | AI Galaxy (智星云) GPU cloud management. SSH/SFTP connections via Python paramiko (`ssh_connector.py`). Instance management via REST API (list, status, start/stop, create, resize, renew). Training job submission using `invoke_shell()` for background processes. Job monitoring via `exec_command()`. File transfer via SFTP + SCP. GPU monitoring (`nvidia-smi`). Screen-based long-running tasks. Docker GPU jobs. Troubleshooting guides for SSH, instance, disk, module, and training issues. | Requires user-provided credentials: instance IP, SSH port, password. Requires Python paramiko library. `ssh_connector.py` helper at `<skill-base>/scripts/`. All shell commands are documented as examples in code blocks — no inline exec. REST API requires AccessKey signature authentication. | NONE | ✅ Verified |
 
 ---
 
 ## Verification Summary
 
-All 10 skills pass the Bifrost skill bridge compatibility requirements:
+All 9 skills pass the Bifrost skill bridge compatibility requirements:
 
 - **Shell exec (`!`cmd``):** NONE — zero skills use inline shell execution syntax
 - **Frontmatter:** All use standard YAML frontmatter with `name` and `description`
@@ -49,12 +48,12 @@ All 10 skills pass the Bifrost skill bridge compatibility requirements:
 | Complexity | Skills |
 |---|---|
 | Simple (<50 lines) | `caveman` (49), `handoff` (15), `grill-me` (10) |
-| Medium (50-250 lines) | `dl-tuning-playbook` (206), `diagnose` (117), `nature-polishing` (74), `ai-galaxy` (243) |
+| Medium (50-250 lines) | `diagnose` (117), `nature-polishing` (74), `ai-galaxy` (243) |
 | Complex (250+ lines) | `ara-manager` (892), `feishu-kb` (417), `night-shift` (448) |
 
 ---
 
-## Best-Effort Skills (Remaining ~66)
+## Best-Effort Skills (Remaining 74)
 
 The following skills exist in the workspace but have NOT been verified against Bifrost
 compatibility criteria. They are listed here for reference with a `best-effort` status.
@@ -69,6 +68,7 @@ Skills are organized by installation scope:
 | `customize-opencode` | Configuration | Not verified |
 | `security-research` | Security | Not verified |
 | `security-review` | Security | Not verified |
+| `dl-tuning-playbook` | Deep Learning / Training | SKILL.md not found in workspace |
 
 ### Project Scope — `.claude/skills/`
 
@@ -167,7 +167,7 @@ These are not necessarily incompatible with Bifrost, but have not been verified.
 
 ## Methodology
 
-Each of the 10 verified skills was audited by reading its full `SKILL.md` source and
+Each of the 9 verified skills was audited by reading its full `SKILL.md` source and
 checking for:
 
 1. Inline shell exec patterns (`!`cmd`` or equivalent)
@@ -177,4 +177,4 @@ checking for:
 5. Argument variable usage
 6. Reference file dependencies
 
-Document generated for Bifrost T7.1 — Skill Bridge Compatibility Documentation.
+Document generated for Bifrost T7.1 — Skill Bridge Compatibility Documentation. Updated for v0.2.1.

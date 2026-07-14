@@ -1,6 +1,6 @@
 from companion.db import get_db
 
-_VALID_TYPES = frozenset({"decision", "pattern", "fact", "feedback"})
+_VALID_TYPES = frozenset({"decision", "pattern", "fact", "feedback", "preference"})
 
 
 def save_memory(type_: str, content: str, scope: str, project_hash: str | None = None) -> int:
