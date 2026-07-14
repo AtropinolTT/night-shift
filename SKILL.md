@@ -8,7 +8,7 @@ description: >
   "queue this job", "what's in the queue", or mentions DeepSeek peak/off-peak pricing.
 argument-hint: "<command> [args...]"
 user-invocable: true
-version: "1.1.0"
+version: "1.2.0"
 ---
 
 # night-shift
