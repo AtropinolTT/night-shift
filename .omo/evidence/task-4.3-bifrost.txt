@@ -1,0 +1,30 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.9, pytest-9.0.2, pluggy-1.5.0 -- /sibcb1/chuyanyilab1/tangjunjie/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /sibcb1/chuyanyilab1/tangjunjie/skills-repo/bifrost
+plugins: anyio-4.12.1
+collecting ... collected 21 items
+
+tests/test_context_integration.py::TestLoadContext::test_no_agents_md_returns_empty PASSED [  4%]
+tests/test_context_integration.py::TestLoadContext::test_loads_agents_md_content PASSED [  9%]
+tests/test_context_integration.py::TestLoadContext::test_empty_agents_md PASSED [ 14%]
+tests/test_context_integration.py::TestLoadContext::test_resolves_import_directive PASSED [ 19%]
+tests/test_context_integration.py::TestLoadContext::test_nested_import PASSED [ 23%]
+tests/test_context_integration.py::TestLoadContext::test_import_cycle_does_not_infinite_loop PASSED [ 28%]
+tests/test_context_integration.py::TestLoadContext::test_import_outside_project_is_skipped PASSED [ 33%]
+tests/test_context_integration.py::TestLoadContext::test_import_not_found_emits_comment PASSED [ 38%]
+tests/test_context_integration.py::TestLoadContext::test_import_exceeds_max_depth PASSED [ 42%]
+tests/test_context_integration.py::TestLoadContext::test_sources_includes_imported_files PASSED [ 47%]
+tests/test_context_integration.py::TestLoadContext::test_user_file_loaded_when_project_file_exists PASSED [ 52%]
+tests/test_context_integration.py::TestLoadContext::test_truncation_when_content_exceeds_max_tokens PASSED [ 57%]
+tests/test_context_integration.py::TestLoadContext::test_truncation_cuts_at_newline PASSED [ 61%]
+tests/test_context_integration.py::TestLoadContext::test_imported_content_also_truncated PASSED [ 66%]
+tests/test_context_integration.py::TestGetMatchingRules::test_no_rules_dir_returns_empty PASSED [ 71%]
+tests/test_context_integration.py::TestGetMatchingRules::test_global_rule_without_paths_always_matches PASSED [ 76%]
+tests/test_context_integration.py::TestGetMatchingRules::test_path_rule_matches_correct_extension PASSED [ 80%]
+tests/test_context_integration.py::TestGetMatchingRules::test_brace_pattern_expansion PASSED [ 85%]
+tests/test_context_integration.py::TestGetMatchingRules::test_malformed_frontmatter_skips_rule PASSED [ 90%]
+tests/test_context_integration.py::TestGetMatchingRules::test_multiple_rules_returned_for_single_file PASSED [ 95%]
+tests/test_context_integration.py::TestGetMatchingRules::test_empty_paths_list_treated_as_global PASSED [100%]
+
+============================== 21 passed in 0.15s ==============================

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BCR Tree + Flow Matching — Glossary</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:opsz@14..32&family=JetBrains+Mono&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', sans-serif;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 40px 24px;
+    color: #1a1a2e;
+    background: #fafafa;
+  }
+  h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+  .sub { color: #555; margin-bottom: 2rem; }
+  .term {
+    background: #fff;
+    border: 1px solid #e0e0e8;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .term summary {
+    padding: 14px 18px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 1.05rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .term summary:hover { background: #f5f6ff; }
+  .term summary .tag {
+    font-size: 0.7rem;
+    background: #4361ee;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+  .term summary .tag.bio { background: #2d6a4f; }
+  .term summary .tag.math { background: #e07a1b; }
+  .term summary .tag.ml { background: #7b2d8e; }
+  .term summary .tag.code { background: #1a73e8; }
+  .term .body { padding: 0 18px 14px; line-height: 1.6; color: #333; }
+  .term .body .see-also { margin-top: 8px; font-size: 0.9rem; color: #4361ee; }
+  .quick-links { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1.5rem; }
+  .quick-links a {
+    padding: 4px 12px;
+    background: #eef1ff;
+    border-radius: 14px;
+    text-decoration: none;
+    font-size: 0.85rem;
+    color: #4361ee;
+  }
+  .quick-links a:hover { background: #d0d5f0; }
+</style>
+</head>
+<body>
+
+<h1>🧬 BCR Tree + Flow Matching Glossary</h1>
+<p class="sub">A quick reference — open each term to expand. Tagged by domain: <span class="tag bio" style="display:inline-block;font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#2d6a4f;color:#fff;">bio</span> <span class="tag math" style="display:inline-block;font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#e07a1b;color:#fff;">math</span> <span class="tag ml" style="display:inline-block;font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#7b2d8e;color:#fff;">ML</span> <span class="tag code" style="display:inline-block;font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#1a73e8;color:#fff;">code</span></p>
+
+<div class="quick-links">
+  <a href="#ablang2">AbLang2</a>
+  <a href="#affinity-maturation">Affinity maturation</a>
+  <a href="#balanced-tree">Balanced tree</a>
+  <a href="#bh-adjustment">BH adjustment</a>
+  <a href="#cdr3">CDR3</a>
+  <a href="#clone">Clone</a>
+  <a href="#conservative-rate">Conservative rate</a>
+  <a href="#ctmc">CTMC</a>
+  <a href="#coupling">Coupling formula</a>
+  <a href="#flow-matching">Flow matching</a>
+  <a href="#guidance-mlp">Guidance MLP</a>
+  <a href="#matrix-exponential">Matrix exponential</a>
+  <a href="#nj-tree">NJ tree</a>
+  <a href="#rate-matrix">Rate matrix</a>
+  <a href="#regression-to-mean">Regression to mean</a>
+  <a href="#shm">SHM</a>
+  <a href="#spearman">Spearman rho</a>
+  <a href="#star-tree">Star tree</a>
+</div>
+
+<details class="term" id="ablang2">
+  <summary>AbLang2 <span class="tag ml">ML</span></summary>
+  <div class="body">
+    An antibody-specific protein language model. Takes an antibody sequence and produces a 2048-dimensional embedding vector per sequence. Pre-trained on millions of antibody sequences. Used in our project to encode BCR sequences — the embedding captures functional properties (antigen binding, stability). <strong>Key:</strong> In our model, the guidance MLP predicts <em>velocity</em> in AbLang2 embedding space.
+    <div class="see-also">See also: <a href="#guidance-mlp">Guidance MLP</a></div>
+  </div>
+</details>
+
+<details class="term" id="affinity-maturation">
+  <summary>Affinity maturation <span class="tag bio">bio</span></summary>
+  <div class="body">
+    The process by which B cells evolve to produce antibodies with higher antigen-binding affinity. Occurs in germinal centers. Key mechanisms: SHM (creates diversity) + selection (survival of high-affinity clones). <strong>Our model aims to simulate this</strong> — Mode B (antigen-guided evolution) with β>0 should produce sequences that move toward a target antigen's embedding.
+    <div class="see-also">See also: <a href="#shm">SHM</a></div>
+  </div>
+</details>
+
+<details class="term" id="balanced-tree">
+  <summary>Balanced tree <span class="tag bio">bio</span></summary>
+  <div class="body">
+    A phylogenetic tree where branching events are spread across the tree, with multiple internal nodes representing shared ancestors. In BCR context: biologically realistic — some B cells divide and mutate more than others, creating a hierarchical structure. <strong>Contrast:</strong> star trees (all leaves from one ancestor), which are often artifacts. After Bug #2 fix, our trees went from mean 1.0 to mean 15.1 internal nodes.
+    <div class="see-also">See also: <a href="#star-tree">Star tree</a></div>
+  </div>
+</details>
+
+<details class="term" id="bh-adjustment">
+  <summary>Benjamini-Hochberg (BH) adjustment <span class="tag math">math</span></summary>
+  <div class="body">
+    A method to control the false discovery rate (FDR) when testing multiple hypotheses simultaneously. Used in Q4 evaluation to correct p-values across all tested features. <strong>Threshold:</strong> q < 0.05 (expected ≤5% of "discoveries" are false positives).
+  </div>
+</details>
+
+<details class="term" id="cdr3">
+  <summary>CDR3 <span class="tag bio">bio</span></summary>
+  <div class="body">
+    Complementarity-Determining Region 3 — the most hypervariable region of the BCR. Formed by V-(D)-J recombination. The primary determinant of antigen specificity. In our data: clones are defined by shared V gene, J gene, and CDR3 length (plus CDR3 similarity). CDR3 is the main target of SHM.
+  </div>
+</details>
+
+<details class="term" id="clone">
+  <summary>Clone / Clonal family <span class="tag bio">bio</span></summary>
+  <div class="body">
+    A group of B cells that descended from the same naive B cell — sharing the same V(D)J rearrangement. In our project: 281 clones from healthy donors, each clone producing a lineage tree. Clone threshold is set empirically via silhouette-score-based optimization (though the code warns this is the <em>wrong</em> criterion for clone definition).
+  </div>
+</details>
+
+<details class="term" id="conservative-rate">
+  <summary>Conservative substitution rate <span class="tag bio">bio</span></summary>
+  <div class="body">
+    The fraction of mutations where the new amino acid is biochemically similar to the old one (BLOSUM62 score > 0). Real SHM heavily favors conservative substitutions (rate ~0.361 in our data). Random mutations would be ~0.124. Our model went from 0.124 → 0.232 after full training — improving but not yet matching biology. <strong>Key metric for evaluating whether the model learns real SHM patterns beyond just being "valid."</strong>
+    <div class="see-also">See also: <a href="#shm">SHM</a></div>
+  </div>
+</details>
+
+<details class="term" id="ctmc">
+  <summary>CTMC (Continuous-Time Markov Chain) <span class="tag math">math</span></summary>
+  <div class="body">
+    A Markov model where: (1) you're always in one of N discrete states (20 AAs), (2) you can jump between states at any time, (3) waiting times are exponentially distributed (memoryless), (4) transitions are governed by a rate matrix Q. <strong>Key properties:</strong> rows of Q sum to zero; the diagonal is negative (total exit rate). Transition probability over time t: P(t) = exp(Q × t) (matrix exponential). Training: sample random t, maximize P(parent → child | Q). Our model uses one CTMC per sequence position.
+    <div class="see-also">See also: <a href="#matrix-exponential">Matrix exponential</a>, <a href="#rate-matrix">Rate matrix</a></div>
+  </div>
+</details>
+
+<details class="term" id="coupling">
+  <summary>Coupling formula <span class="tag math">math</span></summary>
+  <div class="body">
+    The formula that connects the discrete CTMC core to the continuous guidance MLP: <strong>score = R[i→j] × exp(β · cos_sim(v, e_child - e_parent))</strong>. When β=0, guidance = 1, and we use pure CTMC (Mode A). When β>0, the velocity field v modulates the rates — speeding up mutations that align with the guidance direction. <strong>Intuition:</strong> The CTMC says "S→G is biochemically likely (rate 2.0)." The guidance says "moving toward this antigen embedding requires S→G." The coupling says "then S→G is doubly good — both likely and functional."
+    <div class="see-also">See also: <a href="#ctmc">CTMC</a>, <a href="#guidance-mlp">Guidance MLP</a></div>
+  </div>
+</details>
+
+<details class="term" id="flow-matching">
+  <summary>Flow matching <span class="tag ml">ML</span></summary>
+  <div class="body">
+    A generative framework where a model learns to transform a simple distribution into a target distribution by learning a <strong>velocity field</strong> (continuous) or <strong>transition rate matrix</strong> (discrete). Key difference from diffusion: flow matching solves an ODE (deterministic given initial condition) while diffusion solves an SDE (stochastic). This makes flow matching potentially more efficient at inference. In our project: hybrid approach — discrete CTMC for amino acids + continuous guidance in embedding space.
+    <div class="see-also">See also: <a href="#ctmc">CTMC</a></div>
+  </div>
+</details>
+
+<details class="term" id="guidance-mlp">
+  <summary>Guidance MLP <span class="tag ml">ML</span></summary>
+  <div class="body">
+    A 3-layer MLP (2048→512→256→512→2048) that predicts velocity in AbLang2 embedding space. Input: interpolated embedding e_t = (1-t)×e_parent + t×e_child. Output: predicted velocity v. Loss: MSE(v_pred, e_child - e_parent). <strong>Current status:</strong> training but guidance loss ~0 because set_embeddings() was never called — embeddings are all zeros. Guidance MLP has learned "predict zero velocity" which is optimal for zero inputs.
+    <div class="see-also">See also: <a href="#ablang2">AbLang2</a>, <a href="#coupling">Coupling formula</a></div>
+  </div>
+</details>
+
+<details class="term" id="matrix-exponential">
+  <summary>Matrix exponential <span class="tag math">math</span></summary>
+  <div class="body">
+    NOT element-wise exp! Defined as the infinite series: exp(A) = I + A + A²/2! + A³/3! + ... (like the regular exponential series, but with matrix multiplication). Solves the ODE dP/dt = P × Q. <strong>Key property:</strong> if rows of Q sum to zero, rows of exp(Q×t) always sum to 1 (valid probabilities). For t→0: exp(Q×t) ≈ I + Q×t. For t→∞: converges to equilibrium distribution. Computing this is expensive (O(n³) for n=20) but 20×20 matrices are small enough. In PyTorch: <code>torch.linalg.matrix_exp()</code>.
+    <div class="see-also">See also: <a href="#ctmc">CTMC</a>, <a href="#rate-matrix">Rate matrix</a></div>
+  </div>
+</details>
+
+<details class="term" id="nj-tree">
+  <summary>NJ (Neighbor-Joining) tree <span class="tag bio">bio</span></summary>
+  <div class="body">
+    A distance-based phylogenetic tree building method. Fast but less accurate than ML (maximum likelihood). In our project: used to build AA-level trees from Hamming distances between CDR3 sequences. <strong>Known limitation:</strong> NJ tends to produce star trees when sequences are short or highly similar (exactly our case — CDR3s are short). This is a key source of uncertainty: 53% star trees may reflect NJ's limitations, not real biology.
+    <div class="see-also">See also: <a href="#balanced-tree">Balanced tree</a>, <a href="#star-tree">Star tree</a></div>
+  </div>
+</details>
+
+<details class="term" id="rate-matrix">
+  <summary>Rate matrix Q <span class="tag math">math</span></summary>
+  <div class="body">
+    The heart of a CTMC. A 20×20 matrix where Q[i][j] (i≠j) = instantaneous rate of transition from state i to state j. Q[i][i] = -sum(Q[i][j] for j≠i) — so each row sums to zero. <strong>Units:</strong> expected transitions per unit time. If Q[S→G] = 2.0, then in a tiny time dt, expected transitions from S to G = 2.0 × dt. Waiting time for any specific transition is exponentially distributed with rate Q[i][j]. Our model predicts one Q per sequence position (because CDR and framework positions mutate differently).
+    <div class="see-also">See also: <a href="#ctmc">CTMC</a>, <a href="#matrix-exponential">Matrix exponential</a></div>
+  </div>
+</details>
+
+<details class="term" id="regression-to-mean">
+  <summary>Regression to the mean <span class="tag ml">ML</span></summary>
+  <div class="body">
+    The tendency of probabilistic models to predict the "average" outcome rather than the full distribution. In our model: generated sequences have 17.6 ± 1.8 mutations vs real 26.5 ± 39.2. The model plays it safe — it learns the average mutation pattern and produces plausible-looking, 100% valid sequences that lack the diversity of real SHM. <strong>Why it matters:</strong> high validity ≠ good model. A model that always predicts the mean won't generate rare but functionally important mutations. Combatting this is an active research area (temperature scaling, top-k sampling, etc.).
+  </div>
+</details>
+
+<details class="term" id="shm">
+  <summary>SHM (Somatic Hypermutation) <span class="tag bio">bio</span></summary>
+  <div class="body">
+    A process where activated B cells introduce point mutations into their BCR genes at a rate ~10⁶× higher than the normal genomic mutation rate. Mediated by the enzyme AID. Targets the V(D)J region (~400 bp), with hotspots in CDRs. <strong>Key properties:</strong> (1) primarily point mutations (indels rare), (2) favors conservative substitutions (BLOSUM62 > 0), (3) higher rate in CDRs than framework, (4) occurs in germinal centers, (5) combined with selection → affinity maturation. Our model learns the "grammar" of SHM from tree edges.
+    <div class="see-also">See also: <a href="#affinity-maturation">Affinity maturation</a>, <a href="#conservative-rate">Conservative rate</a></div>
+  </div>
+</details>
+
+<details class="term" id="spearman">
+  <summary>Spearman's rank correlation (rho) <span class="tag math">math</span></summary>
+  <div class="body">
+    A non-parametric measure of monotonic association between two variables. Unlike Pearson: doesn't assume linearity, works with ranks. In Q4 evaluation: used to correlate tree features (e.g., stemminess, depth) with functional outcomes (antigen binding). <strong>Thresholds:</strong> r_min = 0.125 (80% power detection floor at n=499) and min_spearman_rho = 0.3 (biological significance). Both must pass for "publication-ready" verdict.
+    <div class="see-also">See also: <a href="#bh-adjustment">BH adjustment</a></div>
+  </div>
+</details>
+
+<details class="term" id="star-tree">
+  <summary>Star tree <span class="tag bio">bio</span></summary>
+  <div class="body">
+    A phylogenetic tree where all leaves connect directly to a single ancestor — no branching structure. Looks like a starfish. In BCR context: usually an artifact of poor tree inference (NJ with short sequences), not real biology. <strong>Our data had 53% star trees before Bug #2 fix</strong> — and actually 100% due to the empty-string key bug (all internal nodes collapsed). After fix: mean internal nodes went from 1.0 → 15.1. Star trees provide no topological information — you can't compute meaningful features like depth, stemminess, or balance.
+    <div class="see-also">See also: <a href="#balanced-tree">Balanced tree</a>, <a href="#nj-tree">NJ tree</a></div>
+  </div>
+</details>
+
+<script>
+// Open terms when linked via URL hash
+if (location.hash) {
+  const el = document.getElementById(location.hash.slice(1));
+  if (el && el.tagName === 'DETAILS') el.open = true;
+}
+// Also open when clicking quick-links
+document.querySelectorAll('.quick-links a').forEach(a => {
+  a.addEventListener('click', () => {
+    const id = a.getAttribute('href').slice(1);
+    const el = document.getElementById(id);
+    if (el) setTimeout(() => el.open = true, 50);
+  });
+});
+</script>
+
+</body>
+</html>

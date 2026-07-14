@@ -1,0 +1,26 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.9, pytest-9.0.2, pluggy-1.5.0 -- /sibcb1/chuyanyilab1/tangjunjie/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /sibcb1/chuyanyilab1/tangjunjie/skills-repo/bifrost
+plugins: anyio-4.12.1
+collecting ... collected 17 items
+
+tests/test_memory_integration.py::TestMemoryIntegration::test_save_all_types_and_scopes PASSED [  5%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_fts_auto_index_on_insert PASSED [ 11%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_keyword_search_returns_relevant_results PASSED [ 17%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_keyword_search_no_match_returns_empty PASSED [ 23%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_empty_query_returns_most_recent PASSED [ 29%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_empty_query_filters_by_scope PASSED [ 35%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_empty_query_filters_by_type PASSED [ 41%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_list_all_memories PASSED [ 47%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_list_filter_by_scope PASSED [ 52%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_list_filter_by_type_comma_separated PASSED [ 58%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_delete_sets_deleted_at_and_hides_from_list PASSED [ 64%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_delete_nonexistent_raises PASSED [ 70%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_delete_already_deleted_raises PASSED [ 76%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_save_raises_on_invalid_type PASSED [ 82%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_save_raises_on_empty_content PASSED [ 88%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_deleted_memory_excluded_from_search PASSED [ 94%]
+tests/test_memory_integration.py::TestMemoryIntegration::test_scope_and_type_filter_together_on_search PASSED [100%]
+
+============================== 17 passed in 1.36s ==============================

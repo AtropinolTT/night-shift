@@ -1,0 +1,20 @@
+{
+  "runId": "wf_8d1b7f9f-e54",
+  "taskId": "wf-8d1b7f9f-e54",
+  "workflowName": "qodercli-transfer-plan",
+  "status": "failed",
+  "result": null,
+  "logs": [],
+  "failures": [],
+  "agentCount": 2,
+  "totalToolCalls": 2,
+  "durationMs": 18762,
+  "usage": {
+    "agents": 2,
+    "toolCalls": 2,
+    "durationMs": 18762
+  },
+  "transcriptDir": "/sibcb1/chuyanyilab1/tangjunjie/skills-repo/.qoder/sessions/f5807ff0-9874-4c50-a018-0b0ad901ce4c/workflows/runs/wf_8d1b7f9f-e54",
+  "scriptPath": "/sibcb1/chuyanyilab1/tangjunjie/skills-repo/.qoder/sessions/f5807ff0-9874-4c50-a018-0b0ad901ce4c/workflows/scripts/qodercli-transfer-plan-wf_8d1b7f9f-e54.js",
+  "error": "TypeError: claudeSkills.trim is not a function. (In 'claudeSkills.trim()', 'claudeSkills.trim' is undefined)"
+}

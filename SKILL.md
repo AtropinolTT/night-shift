@@ -409,6 +409,7 @@ Config directory resolved by `scripts/config-dir.sh`:
 - `~/.claude/night-shift/` (Claude Code)
 - `~/.codex/night-shift/` (Codex CLI)
 - `~/.opencode/night-shift/` (OpenCode)
+- `~/.config/night-shift/` (generic fallback)
 
 | File | Purpose | Editable? |
 |------|---------|-----------|

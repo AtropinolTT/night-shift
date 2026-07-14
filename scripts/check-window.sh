@@ -11,6 +11,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_DIR="$($SCRIPT_DIR/config-dir.sh)"
+if [[ -z "$CONFIG_DIR" ]]; then
+  echo "FATAL: config-dir.sh returned empty path" >&2
+  exit 1
+fi
 
 PRICING_FILE="$CONFIG_DIR/pricing.json"
 SIMULATE=""

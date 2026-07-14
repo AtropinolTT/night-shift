@@ -4,6 +4,9 @@ state.json
 # User-specific config (template is config.example.json)
 config.json
 
+# QoderCLI local settings (developer-specific permissions)
+.qoder/settings.local.json
+
 # OS files
 .DS_Store
 Thumbs.db

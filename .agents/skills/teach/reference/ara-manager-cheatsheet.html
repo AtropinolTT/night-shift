@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARA Manager — Quick Reference</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #faf9f8;
+    color: #1e1e1e;
+    line-height: 1.5;
+    font-size: 14px;
+    padding: 2rem 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .container { max-width: 900px; width: 100%; }
+
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; letter-spacing: -0.01em; }
+  .subtitle { color: #6b6b6b; margin-bottom: 1.5rem; font-size: 0.95rem; }
+
+  h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-top: 1.5rem;
+    margin-bottom: 0.6rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1.5px solid #235789;
+    display: inline-block;
+  }
+
+  .cmd-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  @media (max-width: 600px) { .cmd-grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+  }
+  .card .name { font-weight: 700; font-size: 0.95rem; margin-bottom: 0.15rem; }
+  .card .name code { background: #e8f0f8; color: #235789; font-size: 0.9rem; padding: 0.1em 0.35em; border-radius: 3px; }
+  .card .desc { color: #555; font-size: 0.85rem; }
+  .card .usage { font-size: 0.8rem; color: #888; margin-top: 0.2rem; }
+
+  .callout {
+    padding: 0.6rem 0.8rem;
+    border-radius: 6px;
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+    border-left: 3px solid;
+  }
+  .callout.tip { background: #e8f5e9; border-color: #2e7d32; }
+  .callout.warn { background: #fff8e1; border-color: #f57f17; }
+  .callout.info { background: #e3f2fd; border-color: #1565c0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+  }
+  th, td { padding: 0.35rem 0.6rem; text-align: left; border-bottom: 1px solid #eee; }
+  th { background: #e8f0f8; font-weight: 600; }
+
+  code {
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.9em;
+    background: #f0f0f0;
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+  }
+
+  .section-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #999; margin-bottom: 0.4rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>🗂️ <code>/ara-manager</code> — Quick Reference</h1>
+<p class="subtitle">All commands at a glance. Your ARA project lives at <code>./ara/</code>.</p>
+
+<h2>👀 Inspect (Read-only)</h2>
+<div class="cmd-grid">
+  <div class="card">
+    <div class="name"><code>status</code></div>
+    <div class="desc">Dashboard — claims, staged obs, tree stats, open threads</div>
+    <div class="usage"><code>/ara-manager status --json</code></div>
+  </div>
+  <div class="card">
+    <div class="name"><code>briefing</code></div>
+    <div class="desc">Full sitrep — last session, open threads, stale obs, claims</div>
+    <div class="usage">Good first command each session</div>
+  </div>
+  <div class="card">
+    <div class="name"><code>tree</code></div>
+    <div class="desc">Print exploration DAG (decisions, experiments, etc.)</div>
+    <div class="usage"><code>tree --node N12 --depth 3 --type experiment</code></div>
+  </div>
+</div>
+
+<h2>✏️ Record (Write)</h2>
+<div class="cmd-grid">
+  <div class="card">
+    <div class="name"><code>log decision</code></div>
+    <div class="desc">A deliberate choice between alternatives</div>
+    <div class="usage"><code>log decision "Use X over Y" --provenance user</code></div>
+  </div>
+  <div class="card">
+    <div class="name"><code>log experiment</code></div>
+    <div class="desc">Experiment run + outcome (even negative)</div>
+    <div class="usage"><code>log experiment "R11 HPO: params..." --provenance ai-executed</code></div>
+  </div>
+  <div class="card">
+    <div class="name"><code>log dead_end</code></div>
+    <div class="desc">A path that didn't work</div>
+    <div class="usage"><code>log dead_end "PDI R²≈0 — artifact" --provenance user</code></div>
+  </div>
+  <div class="card">
+    <div class="name"><code>log pivot</code></div>
+    <div class="desc">Change in direction, with trigger</div>
+    <div class="usage"><code>log pivot "RF → XGBoost" --provenance user</code></div>
+  </div>
+  <div class="card">
+    <div class="name"><code>log question</code></div>
+    <div class="desc">An open research question</div>
+    <div class="usage"><code>log question "Does uncertainty help AL?" --provenance ai-suggested</code></div>
+  </div>
+  <div class="card">
+    <div class="name"><code>add-claim</code></div>
+    <div class="desc">Stage a falsifiable assertion</div>
+    <div class="usage"><code>add-claim "EE R²=0.93" --bound-to N30,N45</code></div>
+  </div>
+</div>
+
+<h2>🔄 Advance (Promote)</h2>
+<div class="cmd-grid">
+  <div class="card">
+    <div class="name"><code>crystallize</code></div>
+    <div class="desc">Promote staged O{XX} into logic/</div>
+    <div class="usage"><code>crystallize O114 --via resolution</code></div>
+  </div>
+  <div class="card">
+    <div class="name"><code>advance-claim</code></div>
+    <div class="desc">Update C{XX} status (hypothesis → testing → supported)</div>
+    <div class="usage"><code>advance-claim C07 supported --note "54 tests pass"</code></div>
+  </div>
+  <div class="card">
+    <div class="name"><code>revise-claim</code></div>
+    <div class="desc">Rewrite statement/rationale of C{XX}</div>
+    <div class="usage"><code>revise-claim C07 --statement "..." --rationale "..."</code></div>
+  </div>
+</div>
+
+<h2>🤖 Automated (Batch)</h2>
+<div class="cmd-grid">
+  <div class="card">
+    <div class="name"><code>update with docs/</code></div>
+    <div class="desc">Scan files for claims + decisions → stage</div>
+    <div class="usage"><code>update with docs/handoffs/</code></div>
+  </div>
+  <div class="card">
+    <div class="name"><code>update claims</code></div>
+    <div class="desc">Suggest which claims can advance status</div>
+    <div class="usage">Read-only; confirms before changing</div>
+  </div>
+  <div class="card">
+    <div class="name"><code>update obs</code></div>
+    <div class="desc">Suggest which obs can crystallize</div>
+    <div class="usage">Read-only; confirms before promoting</div>
+  </div>
+  <div class="card">
+    <div class="name"><code>compile</code></div>
+    <div class="desc">3-pass deep read + stage + optional crystallize</div>
+    <div class="usage"><code>compile docs/ --crystallize</code></div>
+  </div>
+</div>
+
+<h2>🛡️ Quality</h2>
+<div class="cmd-grid">
+  <div class="card">
+    <div class="name"><code>validate</code></div>
+    <div class="desc">Seal Level 1 structural checks (17 checks)</div>
+    <div class="usage">Cross-layer refs, provenance, ID uniqueness</div>
+  </div>
+  <div class="card">
+    <div class="name"><code>review</code></div>
+    <div class="desc">Seal Level 2 epistemic audit (delegates to rigor-reviewer)</div>
+    <div class="usage">For deep claim-evidence audit</div>
+  </div>
+</div>
+
+<h2>🏗️ Init</h2>
+<div class="callout info">
+  <code>/ara-manager init "Project Title" --domain "..." --keywords k1,k2 --abstract "..."</code><br>
+  Already done for MARLIN — only needed for new projects.
+</div>
+
+<h2>Closure Signals</h2>
+<table>
+  <tr><th>Signal</th><th>Use when</th><th>Effect</th></tr>
+  <tr><td><code>affirmation</code></td><td>User explicitly endorsed it</td><td>Upgrades provenance</td></tr>
+  <tr><td><code>resolution</code></td><td>Experiment completed, user commented</td><td>Standard promote</td></tr>
+  <tr><td><code>abandonment</code></td><td>No events for 5+ turns</td><td>Clean up stale obs</td></tr>
+  <tr><td><code>commitment</code></td><td>Downstream artifact depends on it</td><td>Code/config merged</td></tr>
+</table>
+
+<h2>Provenance Values</h2>
+<table>
+  <tr><th>Value</th><th>Meaning</th></tr>
+  <tr><td><code>user</code></td><td>You said it / made the call</td></tr>
+  <tr><td><code>ai-suggested</code></td><td>Claude proposed it, not yet confirmed (🥇 safe default)</td></tr>
+  <tr><td><code>ai-executed</code></td><td>Claude ran the experiment / generated the result</td></tr>
+  <tr><td><code>user-revised</code></td><td>Hybrid — Claude proposed, you edited</td></tr>
+</table>
+
+<h2>Claim Status Transitions</h2>
+<div style="font-size:0.85rem; background:white; border:1px solid #ddd; border-radius:6px; padding:0.75rem 1rem; margin-bottom:0.75rem;">
+  <code>hypothesis → testing → supported</code><br>
+  <code>hypothesis → testing → weakened → (stays weakened)</code><br>
+  <code>hypothesis → refuted</code> (terminal — must revise-claim to revive)<br>
+  <code>any → withdrawn</code> (terminal, non-empirical)<br>
+  <code>any → revised</code> (transition marker, resets to hypothesis/testing)
+</div>
+
+<div class="callout tip">
+  <strong>Habit:</strong> Start each session with <code>briefing</code> → <code>tree --type question</code>. End each session with <code>log experiment "..."</code>.
+</div>
+
+</div>
+</body>
+</html>

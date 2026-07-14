@@ -1,0 +1,15 @@
+{
+  "sessionID": "ses_0b29a9d62ffeykQJqahgyI7XIn",
+  "updatedAt": "2026-07-14T12:48:38.856Z",
+  "sources": {
+    "background-task": {
+      "state": "idle",
+      "updatedAt": "2026-07-14T12:48:38.856Z"
+    },
+    "stop": {
+      "state": "stopped",
+      "reason": "continuation stopped",
+      "updatedAt": "2026-07-13T17:55:09.700Z"
+    }
+  }
+}

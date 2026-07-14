@@ -1,0 +1,50 @@
+# Probe 0.2 Evidence Log
+# Date: 2026-07-10
+# Status: COMPLETE
+
+## Summary
+Validated that FastMCP (Python) stdio transport works with OpenCode's MCP server support.
+
+## Findings
+
+### 1. FastMCP Installation
+- Package: fastmcp v3.4.4
+- Installed via: pip install fastmcp
+- Working: from fastmcp import FastMCP
+
+### 2. Echo Server
+- File: /tmp/bifrost-probe-server/echo-server.py (24 lines)
+- Exposes one tool: echo(message: str) -> str
+- Uses stdio transport via mcp.run() (default)
+
+### 3. Protocol Test Results
+- initialize: OK (serverInfo: bifrost-echo/3.4.4)
+- tools/list: OK (echo tool with correct schema)
+- tools/call: OK (returned "Hello from bifrost probe!")
+
+### 4. OpenCode MCP Config Format
+- Key: "mcp" (NOT "mcpServers" from older archived repo)
+- Type: "local" (NOT "stdio")
+- Command: array (NOT string + separate args)
+- Schema source: https://opencode.ai/config.json
+
+### 5. Current Config State
+- File: /sibcb1/chuyanyilab1/tangjunjie/.config/opencode/opencode.json
+- No "mcp" section exists yet (greenfield)
+
+### 6. Correct Config Snippet
+{
+  "mcp": {
+    "bifrost-echo": {
+      "type": "local",
+      "command": ["python3", "/tmp/bifrost-probe-server/echo-server.py"]
+    }
+  }
+}
+
+## Files Created
+- /tmp/bifrost-probe-server/echo-server.py
+- /tmp/bifrost-probe-0.2-results.md
+
+## Conclusion
+FastMCP stdio transport CONFIRMED compatible with OpenCode MCP server support.

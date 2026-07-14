@@ -1,0 +1,44 @@
+# Bifrost Task 0.1 Evidence Log — OpenCode Plugin Hook Validation
+# Timestamp: 2026-07-10
+# Status: COMPLETE ✅
+
+## Sources Probed
+- @opencode-ai/plugin@1.17.18: /sibcb1/chuyanyilab1/tangjunjie/.config/opencode/node_modules/@opencode-ai/plugin/dist/index.d.ts
+- @opencode-ai/sdk@1.17.18: /sibcb1/chuyanyilab1/tangjunjie/.config/opencode/node_modules/@opencode-ai/sdk/dist/gen/types.gen.d.ts
+- oh-my-openagent@4.16.2: /sibcb1/chuyanyilab1/tangjunjie/.config/opencode/node_modules/oh-my-openagent/dist/
+- Config: /sibcb1/chuyanyilab1/tangjunjie/.config/opencode/opencode.json
+- OpenCode binary: /sibcb1/chuyanyilab1/tangjunjie/.nvm/versions/node/v24.15.0/bin/opencode (v1.17.18)
+
+## Hooks Discovered (15 total)
+1. event                              → SDK event stream
+2. tool.execute.before                → Modify args before tool run
+3. tool.execute.after                 → Modify result after tool run
+4. tool.definition                    → Modify tool schemas
+5. chat.message                       → New message received
+6. chat.params                        → Modify LLM params
+7. chat.headers                       → Modify LLM headers
+8. command.execute.before             → Before slash command
+9. permission.ask                     → Allow/deny permissions (BLOCKING)
+10. experimental.session.compacting   → Before compaction
+11. experimental.compaction.autocontinue → After compaction
+12. shell.env                         → Modify shell env
+13. experimental.chat.messages.transform → Transform messages
+14. experimental.chat.system.transform   → Transform system prompt
+15. experimental.text.complete        → Text completion
+
+## SDK Event Types (31 total)
+session.created, session.updated, session.deleted, session.status,
+session.idle, session.compacted, session.diff, session.error,
+message.updated, message.removed, message.part.updated, message.part.removed,
+permission.updated, permission.replied, command.executed, file.edited,
+todo.updated, server.instance.disposed, installation.updated,
+installation.update-available, lsp.client.diagnostics, lsp.updated,
+file.watcher.updated, vcs.branch.updated, tui.prompt.append,
+tui.command.execute, tui.toast.show, pty.created, pty.updated,
+pty.exited, pty.deleted, server.connected
+
+## Verdict: GO ✅
+- tool.execute.before exists and can modify args
+- permission.ask exists and can deny (blocking)
+- Experimental session.compacting exists
+- All hook signatures confirmed from source types

@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 1: Inspect & Log — Keeping Your ARA Alive</title>
+<style>
+  :root {
+    --bg: #faf9f8;
+    --fg: #1e1e1e;
+    --muted: #6b6b6b;
+    --accent: #235789;
+    --accent-light: #e8f0f8;
+    --code-bg: #f0f0f0;
+    --code-fg: #2d2d2d;
+    --border: #ddd;
+    --green: #2e7d32;
+    --green-bg: #e8f5e9;
+    --amber: #f57f17;
+    --amber-bg: #fff8e1;
+    --blue: #1565c0;
+    --blue-bg: #e3f2fd;
+    --purple: #7b1fa2;
+    --purple-bg: #f3e5f5;
+    --red: #c62828;
+    --red-bg: #ffebee;
+    --max-width: 800px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.65;
+    font-size: 16px;
+    padding: 2rem 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .container { max-width: var(--max-width); width: 100%; }
+
+  /* Header */
+  header { margin-bottom: 2.5rem; }
+  header .meta { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.5rem; display: flex; gap: 1rem; flex-wrap: wrap; }
+  header h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 0.75rem; }
+  header .subtitle { font-size: 1.1rem; color: var(--muted); }
+
+  /* Sections */
+  section { margin-bottom: 2.5rem; }
+  h2 {
+    font-size: 1.35rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 2px solid var(--accent);
+    display: inline-block;
+  }
+  h3 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin-bottom: 0.75rem; padding-left: 1.5rem; }
+  li { margin-bottom: 0.35rem; }
+
+  /* Code blocks */
+  code {
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    font-size: 0.9em;
+    background: var(--code-bg);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    color: var(--code-fg);
+  }
+  pre {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 1rem 1.25rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+    tab-size: 2;
+  }
+  pre .cmd { color: #569cd6; }    /* command prefix */
+  pre .out { color: #ce9178; }    /* output */
+  pre .hl { color: #c586c0; }     /* highlight */
+  pre .dim { color: #808080; }
+  pre .str { color: #ce9178; }
+  pre .num { color: #b5cea8; }
+
+  /* Callout boxes */
+  .callout {
+    padding: 1rem 1.25rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border-left: 4px solid;
+  }
+  .callout.tip { background: var(--green-bg); border-color: var(--green); }
+  .callout.tip::before { content: "💡 Tip"; display: block; font-weight: 700; color: var(--green); margin-bottom: 0.25rem; }
+  .callout.warn { background: var(--amber-bg); border-color: var(--amber); }
+  .callout.warn::before { content: "⚠️ Watch out"; display: block; font-weight: 700; color: var(--amber); margin-bottom: 0.25rem; }
+  .callout.info { background: var(--blue-bg); border-color: var(--blue); }
+  .callout.info::before { content: "ℹ️ Note"; display: block; font-weight: 700; color: var(--blue); margin-bottom: 0.25rem; }
+  .callout.hands-on { background: var(--purple-bg); border-color: var(--purple); }
+  .callout.hands-on::before { content: "🔧 Your turn"; display: block; font-weight: 700; color: var(--purple); margin-bottom: 0.25rem; }
+
+  /* Table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+  }
+  th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--accent-light); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+
+  /* Command card */
+  .cmd-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .cmd-card .name { font-weight: 700; font-size: 1.05rem; margin-bottom: 0.25rem; }
+  .cmd-card .name code { background: var(--accent-light); color: var(--accent); }
+  .cmd-card .desc { color: var(--muted); margin-bottom: 0.25rem; }
+  .cmd-card .example { margin-top: 0.5rem; }
+
+  /* Flow diagram */
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+  }
+  .flow .step {
+    background: var(--accent-light);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 0.4rem 0.75rem;
+    font-weight: 500;
+  }
+  .flow .arrow { color: var(--muted); font-size: 1.2rem; }
+
+  /* Footer */
+  footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; text-align: center; }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="meta">
+    <span><a href="../MISSION.md">ARA Project Management</a></span>
+    <span>Lesson 1 of ?</span>
+  </div>
+  <h1>Inspect &amp; Log</h1>
+  <p class="subtitle">The fundamental cycle: know where you are, record what you discover. Every ARA workflow starts here.</p>
+</header>
+
+<section>
+  <h2>Why This Matters</h2>
+  <p>
+    Your ARA project at <code>./ara/</code> already captures 7+ claims, 50+ exploration nodes,
+    and a full experiment log for MARLIN. But research is ongoing — R11 HPO is running,
+    the physicochemical predictor is evolving, and new findings happen every session.
+  </p>
+  <p>
+    An ARA project is only as valuable as it is <strong>current</strong>. If you never log
+    new findings, the claims go stale, staged observations pile up, and the briefing becomes
+    misleading. The two skills you'll learn here — <strong>inspecting</strong> (what's the
+    state?) and <strong>logging</strong> (how do I record?) — are the foundation for keeping
+    your ARA alive.
+  </p>
+</section>
+
+<section>
+  <h2>The Four Layers (Quick Refresher)</h2>
+  <p>You already have all four in <code>./ara/</code>:</p>
+  <table>
+    <tr><th>Layer</th><th>Mutability</th><th>Purpose</th><th>Example</th></tr>
+    <tr>
+      <td><code>logic/</code></td>
+      <td>Mutable (rewritten)</td>
+      <td>Current best understanding: claims, concepts, experiments, problem</td>
+      <td><code>claims.md</code> — C01 through C08</td>
+    </tr>
+    <tr>
+      <td><code>trace/</code></td>
+      <td>Append-only</td>
+      <td>Journey: decisions, experiments, dead-ends, pivots</td>
+      <td><code>exploration_tree.yaml</code> — N01 through N50+</td>
+    </tr>
+    <tr>
+      <td><code>staging/</code></td>
+      <td>Append-only</td>
+      <td>Buffer for observations before crystallization</td>
+      <td><code>observations.yaml</code> — O001 through O1xx</td>
+    </tr>
+    <tr>
+      <td><code>evidence/</code></td>
+      <td>Append-only</td>
+      <td>Raw proof: figures, tables, README index</td>
+      <td><code>figures/</code>, <code>tables/</code></td>
+    </tr>
+  </table>
+  <div class="callout tip">
+    <strong>Rule of thumb:</strong> You write to <code>staging/</code> and <code>trace/</code> frequently.
+    <code>logic/</code> only changes when a staged observation <strong>crystallizes</strong> into a formal claim.
+  </div>
+</section>
+
+<section>
+  <h2>Command 1: <code>status</code> — The Dashboard</h2>
+  <p>Run this first, every session. It tells you what's happening at a glance.</p>
+  <pre>
+<span class="cmd">/ara-manager status</span>
+<span class="out">ARA Project: MARLIN: Manifold-constrained Attention Residuals for LNP Interpretable Network
+Domain:      Computational Biology / Drug Discovery — Molecular Property Prediction
+Location:    ./ara/
+
+Claims (N total):
+  supported     3   ███
+  testing       2   ██
+  hypothesis    1   █
+  withdrawn     1   █
+
+Staged observations: 12  (2 stale ≥ 3 days)
+Exploration nodes:   53  (18 decisions, 12 experiments, 4 dead-ends, 8 pivots, 11 questions)
+Open threads:        3   (see latest session record)
+Last session:        2026-06-24  (turns: 47)</span></pre>
+  <p>Key information at a glance:</p>
+  <ul>
+    <li><strong>Claim statuses</strong> — how many are supported vs testing vs hypothesis. Are we making progress?</li>
+    <li><strong>Staged observations</strong> — knowledge waiting to be formalized. "12 staged, 2 stale" means a cleanup opportunity.</li>
+    <li><strong>Exploration nodes</strong> — the shape of your research: more experiments than dead-ends is healthy.</li>
+    <li><strong>Open threads</strong> — dangling conversations from the last session.</li>
+  </ul>
+  <p>Add <code>--json</code> for machine-readable output (useful if another tool wants to consume it):</p>
+  <pre><span class="cmd">/ara-manager status --json</span></pre>
+</section>
+
+<section>
+  <h2>Command 2: <code>briefing</code> — The Full Picture</h2>
+  <p>Where <code>status</code> is the dashboard, <code>briefing</code> is the sitrep. Run this at the start of a session to pick up where you left off.</p>
+  <pre>
+<span class="cmd">/ara-manager briefing</span>
+<span class="out">Last session: 2026-06-24, 47 turns — "R11 HPO launched, physicochemical predictor analysis"
+Open threads:
+  #1 — R11 HPO results pending (expected ~4h)
+  #2 — Physicochemical predictor R2 report needs review
+
+Staged observations near closure:
+  O114 (claim) — R10 achieves 0.6581 ROC-AUC → signal: resolution (experiment complete)
+  O115 (claim) — XAI demo passes 448/468 rows → signal: affirmation (user confirmed)
+
+Stale observations (≥3 days):
+  O089 (heuristic) — "2-stage screening draft" [5 days] → needs triage
+
+Claims: 3 supported, 2 testing, 1 hypothesis, 1 withdrawn, 0 refuted</span></pre>
+  <div class="callout tip">
+    <strong>Pre-session ritual:</strong> Open Claude Code → <code>/ara-manager briefing</code> → know exactly where you are. Costs < 1 second.
+  </div>
+</section>
+
+<section>
+  <h2>Command 3: <code>tree</code> — The Exploration History</h2>
+  <p>Your ARA project tracks every decision, experiment, dead-end, pivot, and question in a DAG. Use <code>tree</code> to navigate it.</p>
+  <pre>
+<span class="cmd">/ara-manager tree</span>
+<span class="out">N01  [decision] Adopt 7-phase migration plan
+N07  [decision] Standardize on PyTorch Lightning
+├─ N08  [experiment] Try big-bang rewrite
+│  └─ × N09  [dead_end] Big-bang fails — too many entangled deps
+N26  [question] Does Z-score normalization improve organ-level ranking?
+├─ N27  [experiment] Compare raw vs Z-score normalized targets
+│  └─ N28  [decision] Adopt ORGAN_STATS normalization
+...</span></pre>
+  <p>Useful flags:</p>
+  <ul>
+    <li><code>--node N12</code> — show only the subtree rooted at N12</li>
+    <li><code>--type experiment</code> — filter to experiments only</li>
+    <li><code>--depth 2</code> — limit depth (useful for a broad tree)</li>
+  </ul>
+  <div class="callout info">
+    <strong>When to use tree:</strong> When you need to understand <em>why</em> a decision was made, or find the experiment that verified a claim. The tree is your research provenance graph.
+  </div>
+</section>
+
+<section>
+  <h2>The Core Skill: <code>log</code> — Recording What Happens</h2>
+  <p>This is THE command you'll use most. When something happens in research — you make a choice, run an experiment, hit a wall, change direction, or have a question — <code>log</code> it immediately.</p>
+
+  <div class="cmd-card">
+    <div class="name"><code>log decision "description"</code></div>
+    <div class="desc">A deliberate choice between alternatives. Always note what you chose and what you rejected.</div>
+    <div class="example"><pre><span class="cmd">/ara-manager log decision "Use XGBoost for physicochemical predictor primary model" --provenance user</span>
+<span class="out">[ara-manager] Logged N54 (decision) — "Use XGBoost for physicochemical predictor primary model"</span></pre></div>
+  </div>
+
+  <div class="cmd-card">
+    <div class="name"><code>log experiment "description"</code></div>
+    <div class="desc">An experiment you ran. Include the outcome, even if it's inconclusive — negative results are valuable.</div>
+    <div class="example"><pre><span class="cmd">/ara-manager log experiment "R11 HPO: LR=0.0005, growth_rate search [0.003,0.025]" --provenance ai-executed</span>
+<span class="out">[ara-manager] Logged N55 (experiment) — "R11 HPO launched on gpu1"</span></pre></div>
+  </div>
+
+  <div class="cmd-card">
+    <div class="name"><code>log dead_end "description"</code></div>
+    <div class="desc">A path that didn't work. Record <em>why</em> it failed and what you learned — this prevents repeating mistakes.</div>
+    <div class="example"><pre><span class="cmd">/ara-manager log dead_end "PDI prediction R²≈0 — NaN-imputed zeros drove illusion" --provenance user</span>
+<span class="out">[ara-manager] Logged N56 (dead_end) — "PDI prediction fails — artifact mirage"</span></pre></div>
+  </div>
+
+  <div class="cmd-card">
+    <div class="name"><code>log pivot "description"</code></div>
+    <div class="desc">A change in direction — from → to, and what triggered it.</div>
+    <div class="example"><pre><span class="cmd">/ara-manager log pivot "Switched from RF to XGBoost for feature selection" --provenance user</span>
+<span class="out">[ara-manager] Logged N57 (pivot) — "RF → XGBoost for feature selector"</span></pre></div>
+  </div>
+
+  <div class="cmd-card">
+    <div class="name"><code>log question "description"</code></div>
+    <div class="desc">An open research question. Questions stay in the tree until they're answered by an experiment or decision.</div>
+    <div class="example"><pre><span class="cmd">/ara-manager log question "Does ensemble uncertainty improve active learning sampling?" --provenance user</span>
+<span class="out">[ara-manager] Logged N58 (question) — "Ensemble uncertainty for active learning?"</span></pre></div>
+  </div>
+
+  <div class="callout tip">
+    <strong>Provenance rules (just two to remember):</strong>
+    <ul>
+      <li><code>user</code> — you made the call or said it</li>
+      <li><code>ai-executed</code> — Claude ran the experiment/generated the result</li>
+      <li>When unsure? Use <code>ai-suggested</code> (the safe default)</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2>Bonus: <code>add-claim</code> — Staging a New Claim</h2>
+  <p>When you realize something is true but it hasn't been formally claimed yet, stage it as an observation. It'll sit in <code>staging/observations.yaml</code> until it crystallizes.</p>
+  <pre>
+<span class="cmd">/ara-manager add-claim "Physicochemical predictor EE model achieves R²=0.93 on 5-fold CV" --provenance user --bound-to N30,N45</span>
+<span class="out">[ara-manager] Staged O123 (claim) — "Physicochemical predictor EE model achieves R²=0.93 on 5-fold CV"
+  Currently staged. Run `/ara-manager crystallize O123 --via` when ready to promote.</span></pre>
+  <div class="callout warn">
+    The skill checks if your claim reads as a <strong>falsifiable assertion</strong>. If you write "we should try X" it'll warn you — that's a decision, not a claim.
+  </div>
+</section>
+
+<section>
+  <h2>The Lifecycle (3-Minute Overview)</h2>
+  <p>Here's how knowledge flows through your ARA project:</p>
+  <div class="flow">
+    <span class="step">🔬 Discovery</span>
+    <span class="arrow">→</span>
+    <span class="step">📝 <code>log</code> (trace)</span>
+    <span class="arrow">or</span>
+    <span class="step">📋 <code>add-claim</code> (staging)</span>
+    <span class="arrow">→</span>
+    <span class="step">💎 <code>crystallize</code> (logic)</span>
+    <span class="arrow">→</span>
+    <span class="step">📈 <code>advance-claim</code></span>
+  </div>
+  <ol>
+    <li><strong>Discovery</strong> — you run an experiment, make a decision, or realize something</li>
+    <li><strong>Stage or Trace</strong> — <code>log</code> goes directly to the exploration tree; <code>add-claim</code> goes to staging buffer</li>
+    <li><strong>Crystallize</strong> — when you're confident, promote the staged observation into <code>logic/claims.md</code></li>
+    <li><strong>Advance</strong> — as evidence accumulates, move the claim through hypothesis → testing → supported</li>
+  </ol>
+  <p>You don't need to crystallize everything today. The staging buffer is meant to hold observations for later triage.</p>
+</section>
+
+<section>
+  <h2>🔧 Your Turn: 5-Minute Practice</h2>
+
+  <div class="callout hands-on">
+    <strong>Exercise 1 — Check your current state</strong>
+    <p style="margin-top:0.5rem;">Run both commands and observe the output:</p>
+    <pre>! /ara-manager status
+! /ara-manager tree --type question --depth 1</pre>
+    <p>What open questions exist? Are any stale observations waiting for you?</p>
+  </div>
+
+  <div class="callout hands-on">
+    <strong>Exercise 2 — Log something real</strong>
+    <p style="margin-top:0.5rem;">Think of one thing that happened in your last research session. A decision you made, an experiment you ran, or a question that came up. Log it:</p>
+    <pre>! /ara-manager log decision "&lt;what you decided&gt;" --provenance user</pre>
+    <p>Don't overthink it — just get it recorded.</p>
+  </div>
+
+  <div class="callout hands-on">
+    <strong>Exercise 3 — Stage an observation</strong>
+    <p style="margin-top:0.5rem;">Is there a finding you're confident about but haven't claimed yet? Stage it:</p>
+    <pre>! /ara-manager add-claim "&lt;your falsifiable assertion&gt;" --provenance user</pre>
+  </div>
+</section>
+
+<section>
+  <h2>Quick Reference</h2>
+  <table>
+    <tr><th>Command</th><th>When to use</th><th>Where it writes</th></tr>
+    <tr><td><code>status</code></td><td>Every session start — quick dashboard</td><td>Reads only</td></tr>
+    <tr><td><code>briefing</code></td><td>Deep session start — full sitrep</td><td>Reads only</td></tr>
+    <tr><td><code>tree</code></td><td>Navigate exploration history</td><td>Reads only</td></tr>
+    <tr><td><code>log</code></td><td>Right after something happens</td><td><code>trace/exploration_tree.yaml</code></td></tr>
+    <tr><td><code>add-claim</code></td><td>Confident finding, not yet formalized</td><td><code>staging/observations.yaml</code></td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>Coming Up</h2>
+  <p>In <strong>Lesson 2</strong>: <em>Crystallize & Advance</em> — how to promote staged observations into formal claims and track their status as evidence accumulates. And in <strong>Lesson 3</strong>: <em>Update & Compile</em> — automatically extracting claims from your docs.</p>
+  <div class="callout info">
+    <strong>Try this on your own:</strong> Before each session from now on, run <code>/ara-manager briefing</code> first. After each session, run <code>/ara-manager log experiment "..."</code> with the key outcome. This two-command habit alone keeps your ARA alive.
+  </div>
+</section>
+
+<footer>
+  <p><a href="../MISSION.md">Mission: ARA Project Management</a> &middot; Part of the <a href="https://github.com/Orchestra-Research/Agent-Native-Research-Artifact">ARA standard</a></p>
+  <p>Have questions? Ask your agent — every lesson is a conversation.</p>
+</footer>
+
+</div>
+</body>
+</html>

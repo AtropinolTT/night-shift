@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 1: CTMC — The Math of Mutation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:opsz@14..32&family=JetBrains+Mono&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 40px 24px;
+    color: #1a1a2e;
+    background: #fafafa;
+  }
+  h1 { font-size: 2rem; margin-bottom: 0.25em; color: #0a0a23; }
+  .subtitle { color: #555; font-size: 1.1rem; margin-bottom: 2em; border-left: 3px solid #4361ee; padding-left: 16px; }
+  h2 { font-size: 1.4rem; margin-top: 2em; margin-bottom: 0.5em; color: #1a1a2e; }
+  h3 { font-size: 1.15rem; margin-top: 1.5em; margin-bottom: 0.4em; color: #333; }
+  p { margin-bottom: 1em; }
+  .callout {
+    background: #eef1ff;
+    border-left: 4px solid #4361ee;
+    padding: 16px 20px;
+    margin: 1.5em 0;
+    border-radius: 0 8px 8px 0;
+  }
+  .callout.warn {
+    background: #fff8e6;
+    border-left-color: #f0a500;
+  }
+  .callout code {
+    background: rgba(67, 97, 238, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9em;
+  }
+  code {
+    background: #e8e8ec;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9em;
+  }
+  ul, ol { margin-bottom: 1em; padding-left: 24px; }
+  li { margin-bottom: 0.4em; }
+  .formula {
+    background: #f0f0f5;
+    padding: 14px 18px;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1rem;
+    text-align: center;
+    margin: 1.2em 0;
+    color: #1a1a2e;
+  }
+  .formula .highlight { color: #4361ee; font-weight: bold; }
+  .quiz {
+    background: #f8f9ff;
+    border: 1px solid #d0d5f0;
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin: 1.5em 0;
+  }
+  .quiz p { margin-bottom: 0.5em; font-weight: 600; }
+  .quiz .opts { padding-left: 0; list-style: none; }
+  .quiz .opts li {
+    padding: 10px 14px;
+    margin-bottom: 6px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 0.95rem;
+  }
+  .quiz .opts li:hover { background: #eef1ff; border-color: #4361ee; }
+  .quiz .opts li.correct { background: #d4edda; border-color: #28a745; }
+  .quiz .opts li.wrong { background: #f8d7da; border-color: #dc3545; }
+  .quiz .opts li.reveal { background: #eef1ff; border-color: #4361ee; }
+  .quiz .explanation {
+    display: none;
+    margin-top: 12px;
+    padding: 12px 16px;
+    background: #fff;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    font-size: 0.95rem;
+  }
+  .quiz .explanation.show { display: block; }
+  .nav { margin-top: 3em; padding-top: 1.5em; border-top: 1px solid #ddd; font-size: 0.95rem; color: #666; }
+  .viz-box {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 20px;
+    margin: 1.5em 0;
+    text-align: center;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+  }
+  th, td {
+    border: 1px solid #ddd;
+    padding: 8px 12px;
+    text-align: center;
+  }
+  th { background: #eef1ff; font-weight: 600; }
+  .key-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 1em 0;
+  }
+  .key-card {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px;
+    background: #fff;
+  }
+  .key-card h4 { color: #4361ee; margin-bottom: 4px; }
+  @media (max-width: 600px) { .key-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<h1>🧬 CTMC: The Math of Mutation</h1>
+<div class="subtitle">
+  How a Continuous-Time Markov Chain lets us model amino acid evolution — no scary formulas, just intuition.
+</div>
+
+<!-- ============================================ -->
+<h2>1. Start With a Real Mutation</h2>
+
+<p>Look at this real edge from our BCR tree data:</p>
+
+<div class="callout">
+  <strong>Parent:</strong> <code>CASSLGTSGGYEQYF</code><br>
+  <strong>Child:</strong>  <code>CASSLGT<strong style="color:#dc3545;">G</strong>GGYEQYF</code>
+</div>
+
+<p>At position 9 (counting from 0), a mutation happened: <strong>S → G</strong> (Serine → Glycine).</p>
+
+<p>A few questions the model needs to answer:</p>
+<ul>
+  <li>How <em>likely</em> is an S→G mutation vs S→A vs S→P?</li>
+  <li>Does the answer depend on <em>where</em> in the sequence we are (CDR vs framework)?</li>
+  <li>If we wait twice as long, does the mutation chance double? (Spoiler: no — it's an exponential approach, not linear)</li>
+</ul>
+
+<p>To answer these rigorously, we need the CTMC framework. Let's build it from the ground up.</p>
+
+<!-- ============================================ -->
+<h2>2. Intuition First: The Rate Concept</h2>
+
+<p>Imagine you're watching a single amino acid position in a BCR sequence over time.</p>
+
+<div class="key-grid">
+  <div class="key-card">
+    <h4>🏠 You're in state S (Serine)</h4>
+    <p>At any moment, you could mutate to another amino acid. Some transitions are more likely than others.</p>
+  </div>
+  <div class="key-card">
+    <h4>⏱️ The "rate" is a tendency</h4>
+    <p>A rate of R<i>[S→G]</i> = 2.0 means "in a very short time dt, you're about 2×dt likely to jump to G."</p>
+  </div>
+  <div class="key-card">
+    <h4>🧠 Memoryless property</h4>
+    <p>The rate <em>right now</em> doesn't depend on how long you've been in state S. Freshness doesn't change mutation probability.</p>
+  </div>
+  <div class="key-card">
+    <h4>🎲 Competing risks</h4>
+    <p>You can jump to any of 19 other AAs. Whichever happens first wins. Total exit rate = sum of all 19 rates from S.</p>
+  </div>
+</div>
+
+<div class="callout">
+  <strong>🍕 Analogy:</strong> You're at a party (state S). You could leave to go to the pizza place (G), the taco truck (A), or home (stop codon). Each option has a "rate" — how tempted you are per minute. The higher the rate, the sooner you'll make that move on average. But the actual time is random, not fixed.
+</div>
+
+<!-- ============================================ -->
+<h2>3. The Rate Matrix: The Heart of CTMC</h2>
+
+<p>A CTMC is defined by one thing: the <strong>rate matrix Q</strong> (or in our code, R).</p>
+
+<p>For 20 amino acids, Q is a 20×20 matrix:</p>
+
+<div class="formula">
+  Q[i][j] = rate of going <span class="highlight">i → j</span> (i ≠ j)  &nbsp;·&nbsp;  Q[i][i] = <span class="highlight">-Σ Q[i][j]</span> for j≠i
+</div>
+
+<p>The diagonal is <strong>negative</strong> — it's the sum of all exit rates. This makes every row sum to zero, which is a mathematical requirement for conservation of probability.</p>
+
+<div class="viz-box">
+  <table style="width:auto; margin:0 auto;">
+    <tr><th></th><th>→ A</th><th>→ C</th><th>→ D</th><th>→ E</th><th>→ G</th><th>…</th></tr>
+    <tr><td><strong>From S</strong></td><td>0.3</td><td>0.02</td><td>0.1</td><td>0.05</td><td style="background:#eef1ff;"><strong>2.0</strong></td><td>…</td></tr>
+    <tr><td><strong>From G</strong></td><td>0.5</td><td>0.01</td><td>0.05</td><td>0.2</td><td style="color:#999;">−…</td><td>…</td></tr>
+    <tr><td colspan="7" style="font-size:0.85rem; color:#666; text-align:left; padding-top:12px;">
+      Each row = "from" amino acid. Each column = "to" amino acid.<br>
+      S→G has rate 2.0 (high), S→C has rate 0.02 (low — rare mutation).
+    </td></tr>
+  </table>
+</div>
+
+<p><strong>Our model predicts one 20×20 rate matrix per position in the sequence</strong> — because CDR positions mutate differently from framework positions. That's what the Transformer at the core of <code>DiscreteFlowCore</code> does: it looks at the sequence context and outputs the right Q matrix for each position.</p>
+
+<!-- ============================================ -->
+<h2>4. From Rate to Probability: The Magic of Matrix Exponential</h2>
+
+<p>Here's the key question: Given the rate matrix Q, after time t, what's the probability of being at each amino acid?</p>
+
+<p>The answer is the <strong>matrix exponential</strong>:</p>
+
+<div class="formula">
+  P(t) = <span class="highlight">exp(Q × t)</span>
+</div>
+
+<p><strong>This is NOT element-wise exp!</strong> It's the <em>matrix exponential</em> — the solution to the differential equation dP/dt = P × Q.</p>
+
+<div class="callout">
+  <strong>🧠 Intuition:</strong> Think of P(t) as the "cumulative effect" of all possible paths the mutation could take.<br><br>
+  If Q says "S→G at rate 2.0" and "S→A at rate 0.3", then:<br>
+  <ul>
+    <li>At t=0: P = identity matrix (you're definitely still S)</li>
+    <li>At small t: P[S→G] ≈ 2.0 × t, P[S→A] ≈ 0.3 × t</li>
+    <li>At large t: P approaches a steady distribution (the equilibrium)</li>
+  </ul>
+  The matrix exponential captures all of this — including the possibility of <em>multiple</em> mutations (S→G→A in two steps).
+</div>
+
+<div class="quiz">
+  <p>⏸️ <strong>Quick check:</strong> Why can't we just use P = I + Q×t (the linear approximation) for large t?</p>
+  <ol class="opts">
+    <li data-correct="true">Because probabilities must stay ≤ 1, but linear growth would exceed 1 for large t. The matrix exponential correctly saturates.</li>
+    <li data-correct="false">Because matrix multiplication is too slow for large t.</li>
+    <li data-correct="false">Because Q changes over time, so linear approximation doesn't work.</li>
+  </ol>
+  <div class="explanation">
+    <strong>Correct:</strong> If P[S→G] ≈ 2.0 × t, then at t=0.6 the probability would be 1.2 (>1.0!) which is impossible. The matrix exponential correctly accounts for the fact that as probability accumulates at G, there's less probability left at S to depart from. It's self-limiting — like compound interest in reverse. This is why the rows of exp(Q×t) always sum to 1.
+  </div>
+</div>
+
+<!-- ============================================ -->
+<h2>5. CTMC in the Context of Flow Matching</h2>
+
+<p>Now here's the connection to our <span style="background:#eef1ff;padding:2px 4px;border-radius:4px;">coupled_loss</span> function:</p>
+
+<div class="callout" style="background:#e6ffe6; border-left-color:#28a745;">
+  <p><strong>Training step:</strong></p>
+  <ol>
+    <li>We have a <strong>parent</strong> and a <strong>child</strong> sequence from a real tree edge</li>
+    <li>We <strong>sample a random time t</strong> uniformly from (0, 1)</li>
+    <li>We ask: "At this random time, what's the probability of observing the child given the parent, under our predicted rate matrix?"</li>
+    <li>We <strong>maximize this probability</strong> (minimize negative log-likelihood)</li>
+  </ol>
+  <p style="margin-top:8px;">The model learns: "For this position, in this context, the rate of S→G should be high and the rate of S→C should be low" — exactly the pattern in real SHM.</p>
+</div>
+
+<p>At <strong>generation time</strong>, we reverse the process:</p>
+<ul>
+  <li>Start from a parent sequence</li>
+  <li>At each tiny time step Δt, compute the current rate matrix Q</li>
+  <li>Sample mutations according to P = exp(Q × Δt)</li>
+  <li>Step forward in time until t=1</li>
+  <li>The result: a realistic child sequence</li>
+</ul>
+
+<!-- ============================================ -->
+<h2>6. Wait — Why Flow Matching? Why Not Just Count Mutations?</h2>
+
+<p>Good question. If we have 2,765 real tree edges, why not just build a frequency table: "In CDR, S→G happened 45 times, S→A happened 12 times..."?</p>
+
+<div class="callout warn">
+  <strong>Three reasons we need CTMC + flow matching instead:</strong>
+</div>
+
+<table>
+  <tr><th>Approach</th><th>Limitation</th></tr>
+  <tr><td>Simple counting</td><td>Can't generalize to positions or contexts not seen in training data. No notion of continuous time.</td></tr>
+  <tr><td>Autoregressive LM (e.g., Transformer predicting child from parent)</td><td>Fixed one-step prediction — can't generate <em>trajectories</em> or intermediate states. No continuous-time control.</td></tr>
+  <tr><td><strong>Flow matching (our approach)</strong></td>
+      <td>✅ Continuous time — can simulate evolution at any time scale<br>
+          ✅ Generalizes via learned rate functions, not lookup tables<br>
+          ✅ Guidance mechanism — steer toward antigen binding<br>
+          ✅ Smooth trajectories, not just one big jump</td></tr>
+</table>
+
+<div class="quiz">
+  <p>🧪 <strong>Scenario:</strong> Your model generates a child with 17 mutations, but the real data has 26.5 ± 39.2 mutations. The model produces mostly conservative substitutions (similar amino acids). What's happening?</p>
+  <ol class="opts">
+    <li data-correct="false">The model is overfitting to noise in the training data.</li>
+    <li data-correct="true">This is <strong>regression to the mean</strong> — the model learns the average mutation count and plays it safe. It's conservative: it produces plausible-looking sequences with low variance, missing the diversity of real SHM.</li>
+    <li data-correct="false">The model's rate matrix is incorrect and needs to be replaced.</li>
+  </ol>
+  <div class="explanation">
+    <strong>Correct:</strong> This is exactly what we observe in our model (17.6 ± 1.8 mutations vs real 26.5 ± 39.2). The model has learned the "average" behavior well — it generates perfect-looking sequences (100% valid) — but it's playing it safe. The variance is too low. This is a <em>known challenge</em> with flow matching: the model converges to the mean path unless specifically encouraged to explore more. It's not broken — but it's not capturing the full distribution yet.
+  </div>
+</div>
+
+<!-- ============================================ -->
+<h2>7. From CTMC to the Full Model</h2>
+
+<p>The CTMC is just the <strong>discrete core</strong>. But our model has two more pieces:</p>
+
+<div class="key-grid">
+  <div class="key-card">
+    <h4>🧩 Discrete Core (CTMC)</h4>
+    <p>Transformer → 20×20 rate matrix per position. Models the biochemical likelihood of each mutation.</p>
+  </div>
+  <div class="key-card">
+    <h4>🧭 Guidance MLP</h4>
+    <p>Predicts velocity in <strong>AbLang2 embedding space</strong>. Captures functional/antigenic properties.</p>
+  </div>
+  <div class="key-card">
+    <h4>🔗 Coupling</h4>
+    <p><code>score = rate × exp(β · cos_sim(v, Δ_embedding))</code><br>
+    The guidance score <em>modulates</em> the discrete rate. If β=0, pure CTMC (Mode A).</p>
+  </div>
+  <div class="key-card">
+    <h4>🌳 Tree Data</h4>
+    <p>2,765 parent→child edges from 281 clones. Each edge = one training example.</p>
+  </div>
+</div>
+
+<p>The coupling formula is where the magic lives:</p>
+
+<div class="formula">
+  score(i → j) = R[i→j] × <span class="highlight">exp( β · cos_sim(v, e_child - e_parent) )</span>
+</div>
+
+<p>If β = 0, the guidance term = 1, and we're left with pure CTMC rate → <strong>Mode A: unconditional SHM simulation</strong>.</p>
+<p>If β > 0 and v points toward a target antigen embedding → <strong>Mode B: antigen-guided evolution</strong>.</p>
+
+<!-- ============================================ -->
+<h2>8. Vocabulary: What is a "Balanced Tree"?</h2>
+
+<div class="callout">
+  You asked about balanced trees earlier. Here's the quick answer (we'll go deeper in Lesson 2):
+</div>
+
+<p>In BCR lineage trees:</p>
+<ul>
+  <li><strong>Star tree:</strong> One ancestor, all leaves directly attached. Looks like a starfish. Implies no branching structure — all mutations happened independently. <em>This is usually an artifact of poor tree inference, not real biology.</em></li>
+  <li><strong>Balanced tree:</strong> Branching events are spread out — the tree has intermediate nodes (internal nodes) that represent shared ancestors of subsets of sequences. Matches the biological expectation: B cells divide, mutate, and some daughter cells continue to divide and mutate.</li>
+</ul>
+
+<div class="quiz">
+  <p>🌳 <strong>Our data had 53% star trees before Bug #2 was fixed.</strong> What was the bug?</p>
+  <ol class="opts">
+    <li data-correct="false">The tree-building algorithm was using the wrong distance metric.</li>
+    <li data-correct="true">All unnamed internal nodes got the empty string '' as their dictionary key — so every unnamed internal node overwrote the previous one. Result: every tree had exactly 1 internal node → all trees were stars, regardless of the real topology.</li>
+    <li data-correct="false">The sequences were too short to infer branching structure.</li>
+  </ol>
+  <div class="explanation">
+    <strong>This is a real bug from our project history!</strong> Line 46-51 of build_graph_data.py: <code>if node.name and node.name in name_to_idx</code> — the fix was adding the <code>node.name and</code> check. Before the fix: <code>if node.name in name_to_idx</code> → empty string always checks True for '' (since it was added for the first unnamed node), so all subsequent unnamed nodes were treated as the same node. After the fix: unnamed nodes always get unique indices. The mean internal nodes went from 1.0 → 15.1. This is a cautionary tale about trusting your tree data!
+  </div>
+</div>
+
+<!-- ============================================ -->
+<h2>Summary: What You Should Remember</h2>
+
+<ul>
+  <li><strong>CTMC</strong> = Markov chain with continuous time. Defined by a rate matrix Q (20×20 for AAs).</li>
+  <li><strong>Q[i][j]</strong> = instantaneous rate of i→j. Higher = faster / more likely.</li>
+  <li><strong>Matrix exponential</strong> P(t) = exp(Q×t) converts rates to probabilities over time t. It's the solution to the ODE dP/dt = P×Q.</li>
+  <li><strong>Training:</strong> Sample random t, maximize P(parent → child at time t) under predicted Q.</li>
+  <li><strong>Our model:</strong> Transformer predicts one Q per position + guidance MLP modulates rates.</li>
+  <li><strong>β=0</strong> → pure CTMC simulation (Mode A). Works now.</li>
+  <li><strong>Star trees</strong> = artifact. Balanced trees = real biology. Always verify tree topology.</li>
+</ul>
+
+<div class="nav">
+  <p><strong>Before Lesson 2:</strong> Think about this — our model generates sequences with 100% validity but low variance. What metric <em>beyond</em> validity would tell you the model is learning real biology? (Hint: we mentioned it in the grilling session.)</p>
+  <p>→ <a href="javascript:void(0)" onclick="this.parentElement.innerHTML+='<br><strong>Answer:</strong> <em>Conservative substitution rate</em> (BLOSUM62 score > 0). Real SHM favors biochemically similar substitutions. Our model went from 0.124 (random) to 0.232 (full training) — improving but still below the real rate of 0.361. Validity tells you it speaks the language; conservative rate tells you it knows the biology.'">Click to check your answer</a></p>
+  <p style="margin-top:1em;"><strong>Open this lesson:</strong> In the project root, run: <code>open .claude/skills/teach/lessons/0001-ctmc-the-math-of-mutation.html</code> (Mac) or <code>xdg-open .claude/skills/teach/lessons/0001-ctmc-the-math-of-mutation.html</code> (Linux)</p>
+</div>
+
+<script>
+document.querySelectorAll('.quiz .opts li').forEach(li => {
+  li.addEventListener('click', function() {
+    const quiz = this.closest('.quiz');
+    quiz.querySelectorAll('.opts li').forEach(l => {
+      l.classList.remove('correct', 'wrong');
+      if (l.dataset.correct === 'true') l.classList.add('reveal');
+    });
+    this.classList.add(this.dataset.correct === 'true' ? 'correct' : 'wrong');
+    quiz.querySelector('.explanation').classList.add('show');
+  });
+});
+</script>
+
+</body>
+</html>

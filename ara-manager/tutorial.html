@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARA Project Manager — Interactive Tutorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=DM+Sans:opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Variables ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-deep: #080C14;
+  --bg-surface: #0F1520;
+  --bg-card: #141B2B;
+  --bg-elevated: #1A2340;
+  --border-subtle: rgba(56, 189, 248, 0.08);
+  --border-card: rgba(56, 189, 248, 0.12);
+  --accent: #38BDF8;
+  --accent-dim: rgba(56, 189, 248, 0.15);
+  --accent-glow: rgba(56, 189, 248, 0.08);
+  --amber: #F59E0B;
+  --amber-dim: rgba(245, 158, 11, 0.12);
+  --emerald: #34D399;
+  --rose: #FB7185;
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --terminal-bg: #0A0D14;
+  --terminal-border: #1E293B;
+  --terminal-green: #34D399;
+  --terminal-cyan: #22D3EE;
+  --font-display: 'Fraunces', serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+}
+
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ── Background texture ───────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(56, 189, 248, 0.03) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(52, 211, 153, 0.02) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, rgba(56, 189, 248, 0.015) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.grid-bg {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background-image:
+    linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Layout ────────────────────────────────────────────────────── */
+.wrapper { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+/* ── Side Nav ──────────────────────────────────────────────────── */
+.side-nav {
+  position: fixed;
+  top: 0; left: 0;
+  width: 220px;
+  height: 100vh;
+  background: rgba(15, 21, 32, 0.92);
+  backdrop-filter: blur(12px);
+  border-right: 1px solid var(--border-subtle);
+  padding: 32px 20px;
+  overflow-y: auto;
+  z-index: 100;
+  transform: translateX(-100%);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.side-nav.open { transform: translateX(0); }
+
+.side-nav h3 {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 20px;
+}
+.side-nav a {
+  display: block;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 13px;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s;
+  margin-bottom: 2px;
+}
+.side-nav a:hover { color: var(--text-primary); background: var(--accent-dim); }
+.side-nav-close {
+  position: absolute;
+  top: 12px; right: 12px;
+  background: none; border: none; color: var(--text-muted);
+  font-size: 22px; cursor: pointer;
+  padding: 4px 8px; border-radius: 4px;
+  transition: color 0.2s;
+}
+.side-nav-close:hover { color: var(--text-primary); }
+
+/* ── Nav Toggle ────────────────────────────────────────────────── */
+.nav-toggle {
+  position: fixed;
+  top: 20px; left: 24px;
+  z-index: 99;
+  background: rgba(15, 21, 32, 0.8);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  width: 40px; height: 40px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  transition: all 0.2s;
+}
+.nav-toggle:hover { color: var(--accent); border-color: var(--accent-dim); }
+
+/* ── Hero ──────────────────────────────────────────────────────── */
+.hero {
+  padding: 100px 0 60px;
+  text-align: center;
+  position: relative;
+}
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-dim);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 16px;
+  border-radius: 100px;
+  margin-bottom: 24px;
+  opacity: 0;
+  animation: fadeSlideUp 0.6s 0.1s forwards;
+}
+.hero h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 5vw, 3.8rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin-bottom: 16px;
+  opacity: 0;
+  animation: fadeSlideUp 0.6s 0.2s forwards;
+}
+.hero h1 span {
+  background: linear-gradient(135deg, var(--accent) 0%, #22D3EE 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero p {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  max-width: 640px;
+  margin: 0 auto 32px;
+  opacity: 0;
+  animation: fadeSlideUp 0.6s 0.3s forwards;
+}
+.hero-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  opacity: 0;
+  animation: fadeSlideUp 0.6s 0.4s forwards;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.25s;
+  border: none;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #080C14;
+}
+.btn-primary:hover { background: #7DD3FC; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(56, 189, 248, 0.3); }
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-card);
+}
+.btn-ghost:hover { color: var(--text-primary); border-color: var(--accent); background: var(--accent-dim); }
+
+/* ── Sections ──────────────────────────────────────────────────── */
+section {
+  padding: 64px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+section:last-of-type { border-bottom: none; }
+
+.section-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.section-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  margin-bottom: 16px;
+}
+.section-sub {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  max-width: 600px;
+  margin-bottom: 36px;
+}
+
+/* ── ARA Structure Diagram ────────────────────────────────────── */
+.ara-diagram {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 32px 0;
+}
+.ara-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  padding: 20px;
+}
+.ara-panel.full { grid-column: 1 / -1; }
+.ara-panel h4 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ara-panel h4 .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot-mutable { background: var(--accent); }
+.dot-append { background: var(--amber); }
+.ara-panel ul {
+  list-style: none;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.ara-panel ul li {
+  padding: 4px 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.ara-panel ul li code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--terminal-cyan);
+  background: rgba(34, 211, 238, 0.08);
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.ara-mutability-note {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ── Terminal Blocks ───────────────────────────────────────────── */
+.terminal {
+  background: var(--terminal-bg);
+  border: 1px solid var(--terminal-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin: 20px 0;
+}
+.terminal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--terminal-border);
+}
+.terminal-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+}
+.terminal-dot:nth-child(1) { background: #FB7185; }
+.terminal-dot:nth-child(2) { background: #F59E0B; }
+.terminal-dot:nth-child(3) { background: #34D399; }
+.terminal-label {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  margin-left: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.terminal-body {
+  padding: 16px 20px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-x: auto;
+  color: var(--text-secondary);
+}
+.terminal-body .prompt { color: var(--terminal-green); }
+.terminal-body .cmd { color: var(--text-primary); }
+.terminal-body .output { color: var(--text-muted); }
+.terminal-body .comment { color: var(--text-muted); font-style: italic; }
+.terminal-body .highlight { color: var(--accent); }
+.terminal-body .highlight-amber { color: var(--amber); }
+.terminal-body .highlight-green { color: var(--terminal-green); }
+.terminal-body .arrow { color: var(--terminal-cyan); }
+
+/* ── Command Cards ─────────────────────────────────────────────── */
+.cmd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin: 24px 0;
+}
+.cmd-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  transition: all 0.25s;
+  cursor: default;
+}
+.cmd-card:hover {
+  border-color: rgba(56, 189, 248, 0.25);
+  background: var(--bg-elevated);
+  transform: translateY(-2px);
+}
+.cmd-card .cmd-name {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.cmd-card .cmd-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.cmd-card .cmd-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-top: 10px;
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.cmd-card .cmd-tag.log { background: var(--amber-dim); color: var(--amber); }
+.cmd-card .cmd-tag.stage { background: rgba(52, 211, 153, 0.12); color: var(--emerald); }
+.cmd-card .cmd-tag.review { background: rgba(251, 113, 133, 0.12); color: var(--rose); }
+
+/* ── Walkthrough Steps ────────────────────────────────────────── */
+.steps { counter-reset: step; margin-top: 32px; }
+.step {
+  counter-increment: step;
+  padding: 28px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  position: relative;
+  padding-left: 80px;
+  transition: all 0.3s;
+}
+.step:hover { border-color: rgba(56, 189, 248, 0.2); }
+.step::before {
+  content: counter(step);
+  position: absolute;
+  left: 24px;
+  top: 28px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.step h4 {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.step p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+/* ── Best Practices ────────────────────────────────────────────── */
+.practices-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 28px;
+}
+.practice-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  padding: 24px;
+}
+.practice-card .icon {
+  font-size: 20px;
+  margin-bottom: 10px;
+  display: inline-block;
+}
+.practice-card h4 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.practice-card p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.practice-card .example {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--terminal-bg);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.practice-card .example .good { color: var(--terminal-green); }
+.practice-card .example .bad { color: var(--rose); }
+
+/* ── Provenance Table ──────────────────────────────────────────── */
+.prov-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  font-size: 14px;
+}
+.prov-table th {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.prov-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+.prov-table td:first-child {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-weight: 500;
+}
+.prov-table tr:hover td { color: var(--text-primary); }
+
+/* ── Transition Diagram ───────────────────────────────────────── */
+.transition-diagram {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  margin: 20px 0;
+  font-size: 13px;
+}
+.transition-diagram .state {
+  padding: 8px 18px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.transition-diagram .state.initial { border-color: rgba(56, 189, 248, 0.3); color: var(--accent); }
+.transition-diagram .state.terminal { border-color: rgba(251, 113, 133, 0.3); color: var(--rose); }
+.transition-diagram .state.settled { border-color: rgba(52, 211, 153, 0.3); color: var(--emerald); }
+.transition-diagram .state.marker { border-color: rgba(245, 158, 11, 0.3); color: var(--amber); }
+.transition-diagram .arrow-state { color: var(--text-muted); font-size: 16px; }
+
+/* ── Ecosystem Section ─────────────────────────────────────────── */
+.ecosystem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+  margin: 28px 0;
+}
+.eco-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  transition: all 0.25s;
+}
+.eco-card:hover { border-color: rgba(56, 189, 248, 0.2); transform: translateY(-2px); }
+.eco-card .eco-name {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.eco-card .eco-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.eco-card.featured {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.06), transparent);
+}
+
+/* ── Footer ────────────────────────────────────────────────────── */
+footer {
+  padding: 48px 0 32px;
+  text-align: center;
+  border-top: 1px solid var(--border-subtle);
+}
+footer p {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+footer a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+footer a:hover { color: var(--accent); }
+
+/* ── Animations ────────────────────────────────────────────────── */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal.visible { opacity: 1; transform: translateY(0); }
+
+/* ── Responsive ────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .wrapper { padding: 0 16px; }
+  .hero { padding: 80px 0 40px; }
+  section { padding: 40px 0; }
+  .ara-diagram { grid-template-columns: 1fr; }
+  .cmd-grid { grid-template-columns: 1fr; }
+  .practices-grid { grid-template-columns: 1fr; }
+  .step { padding-left: 68px; }
+  .step::before { left: 16px; width: 32px; height: 32px; font-size: 14px; }
+  .transition-diagram { font-size: 12px; gap: 4px; padding: 16px; }
+  .transition-diagram .state { padding: 6px 12px; font-size: 11px; }
+  .side-nav { width: 100%; }
+  .ecosystem-grid { grid-template-columns: 1fr; }
+  .nav-toggle { left: 16px; }
+}
+@media (min-width: 1200px) {
+  .wrapper { padding: 0 40px; }
+}
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+
+<!-- Side Navigation -->
+<nav class="side-nav" id="sideNav">
+  <button class="side-nav-close" onclick="toggleNav()">&times;</button>
+  <h3>ARA Manager</h3>
+  <a href="#what-is-ara" onclick="toggleNav()">What is ARA?</a>
+  <a href="#commands" onclick="toggleNav()">Command Reference</a>
+  <a href="#walkthrough" onclick="toggleNav()">Walkthrough</a>
+  <a href="#best-practices" onclick="toggleNav()">Best Practices</a>
+  <a href="#provenance" onclick="toggleNav()">Provenance</a>
+  <a href="#ecosystem" onclick="toggleNav()">Ecosystem</a>
+</nav>
+
+<button class="nav-toggle" onclick="toggleNav()" aria-label="Toggle navigation">&#9776;</button>
+
+<div class="wrapper">
+
+<!-- Hero -->
+<header class="hero">
+  <div class="hero-badge">
+    <span>&#9670;</span> ARA Skill Family
+  </div>
+  <h1>ARA <span>Project Manager</span></h1>
+  <p>A command-based interface for creating, managing, and validating Agent-Native Research Artifacts — turning research projects into machine-executable knowledge packages.</p>
+  <div class="hero-actions">
+    <a href="#walkthrough" class="btn btn-primary">Start Walkthrough &#8595;</a>
+    <a href="#commands" class="btn btn-ghost">View Commands</a>
+  </div>
+</header>
+
+<!-- What is ARA -->
+<section id="what-is-ara">
+  <div class="section-label reveal">Foundation</div>
+  <h2 class="section-title reveal">What is an ARA?</h2>
+  <p class="section-sub reveal">An Agent-Native Research Artifact (ARA) organizes a research project into four interlocking layers that AI agents can navigate, reproduce, and extend.</p>
+
+  <div class="ara-diagram reveal">
+    <div class="ara-panel">
+      <h4><span class="dot dot-mutable"></span> logic/</h4>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;"><strong style="color:var(--accent);">What &amp; Why</strong> &mdash; Mutable current understanding</p>
+      <ul>
+        <li><code>problem.md</code> Observations &rarr; gaps &rarr; insight</li>
+        <li><code>claims.md</code> Falsifiable claims (C01, C02, &hellip;)</li>
+        <li><code>concepts.md</code> Formal term definitions</li>
+        <li><code>experiments.md</code> Declarative experiment plans</li>
+        <li><code>related_work.md</code> Typed dependency graph</li>
+        <li><code>solution/</code> Constraints &amp; heuristics</li>
+      </ul>
+    </div>
+    <div class="ara-panel">
+      <h4><span class="dot dot-mutable"></span> src/</h4>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;"><strong style="color:var(--accent);">How</strong> &mdash; Concrete artifacts</p>
+      <ul>
+        <li><code>environment.md</code> Reproducibility (deps, hardware)</li>
+        <li><code>configs/</code> Configuration files</li>
+        <li><code>execution/</code> Run scripts &amp; pipelines</li>
+        <li><code>data/</code> Datasets &amp; processed results</li>
+      </ul>
+    </div>
+    <div class="ara-panel">
+      <h4><span class="dot dot-append"></span> trace/</h4>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;"><strong style="color:var(--amber);">Journey</strong> &mdash; Append-only</p>
+      <ul>
+        <li><code>exploration_tree.yaml</code> Research DAG</li>
+        <li><code>pm_reasoning_log.yaml</code> Organizational decisions</li>
+        <li><code>sessions/</code> Per-day session records</li>
+      </ul>
+    </div>
+    <div class="ara-panel">
+      <h4><span class="dot dot-append"></span> staging/</h4>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;"><strong style="color:var(--amber);">Buffer</strong> &mdash; Append-only</p>
+      <ul>
+        <li><code>observations.yaml</code> Raw observations awaiting closure</li>
+      </ul>
+    </div>
+    <div class="ara-panel full">
+      <h4><span class="dot dot-append"></span> evidence/</h4>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;"><strong style="color:var(--amber);">Raw Proof</strong> &mdash; Append-only</p>
+      <ul>
+        <li><code>tables/</code> &amp; <code>figures/</code> &amp; <code>proofs/</code></li>
+        <li>Each file maps back to specific claims</li>
+      </ul>
+    </div>
+  </div>
+  <p class="ara-mutability-note reveal"><strong>Rule of thumb:</strong> <code>logic/</code> rewrites in place (current best understanding); everything else only appends (the immutable record).</p>
+</section>
+
+<!-- Commands -->
+<section id="commands">
+  <div class="section-label reveal">Reference</div>
+  <h2 class="section-title reveal">Command Reference</h2>
+  <p class="section-sub reveal">Every command is invoked as <code>/ara-manager &lt;command&gt; [args...]</code>. Commands fall into five categories.</p>
+
+  <div class="cmd-grid reveal">
+    <div class="cmd-card">
+      <div class="cmd-name">init</div>
+      <div class="cmd-desc">Create a new ARA project with seed files. Refuses to overwrite existing projects.</div>
+      <span class="cmd-tag">project</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">status</div>
+      <div class="cmd-desc">Dashboard: claim counts by status, staged observations, exploration nodes, last session.</div>
+      <span class="cmd-tag">project</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">briefing</div>
+      <div class="cmd-desc">Full context: where you left off, open threads, stale observations, pending suggestions.</div>
+      <span class="cmd-tag">project</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">tree</div>
+      <div class="cmd-desc">Print the exploration DAG as an indented tree. Filter by <code>--node</code>, <code>--depth</code>, <code>--type</code>.</div>
+      <span class="cmd-tag">project</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">log</div>
+      <div class="cmd-desc">Log a journey fact: <code>decision</code>, <code>experiment</code>, <code>dead_end</code>, <code>pivot</code>, or <code>question</code>.</div>
+      <span class="cmd-tag log">journey</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">add-claim</div>
+      <div class="cmd-desc">Stage a falsifiable claim. Content is validated for falsifiability (warning only).</div>
+      <span class="cmd-tag stage">stage</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">add-heuristic</div>
+      <div class="cmd-desc">Stage an implementation heuristic (e.g. &ldquo;use cosine LR with 5-epoch warmup&rdquo;).</div>
+      <span class="cmd-tag stage">stage</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">add-concept</div>
+      <div class="cmd-desc">Stage a formal term definition with <code>--def</code>.</div>
+      <span class="cmd-tag stage">stage</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">add-constraint</div>
+      <div class="cmd-desc">Stage a boundary condition (memory, time, scope limits).</div>
+      <span class="cmd-tag stage">stage</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">crystallize</div>
+      <div class="cmd-desc">Promote a staged observation into <code>logic/</code> on a closure signal (<code>--via affirmation|resolution|commitment|abandonment</code>).</div>
+      <span class="cmd-tag">promote</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">advance-claim</div>
+      <div class="cmd-desc">Update a claim&rsquo;s status (e.g. <code>testing &rarr; supported</code>). Records change in the session log.</div>
+      <span class="cmd-tag">promote</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">revise-claim</div>
+      <div class="cmd-desc">Rewrite a claim&rsquo;s <code>Statement</code> or <code>Rationale</code>. Validates continued falsifiability.</div>
+      <span class="cmd-tag">promote</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">validate</div>
+      <div class="cmd-desc">Seal Level 1: 17 structural checks — file presence, cross-layer binding, provenance hygiene, self-consistency.</div>
+      <span class="cmd-tag review">audit</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">review</div>
+      <div class="cmd-desc">Seal Level 2: Deep epistemic review (delegates to <code>/rigor-reviewer</code>).</div>
+      <span class="cmd-tag review">audit</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">compile</div>
+      <div class="cmd-desc">3-pass epistemic extraction from inputs: inventory &rarr; classify/dedup &rarr; stage + optional crystallize.</div>
+      <span class="cmd-tag review">audit</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">update</div>
+      <div class="cmd-desc">Lightweight scan: <code>update with &lt;path&gt;</code>, <code>update claims</code>, <code>update obs</code>.</div>
+      <span class="cmd-tag">scan</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">organize</div>
+      <div class="cmd-desc">Multi-agent maintenance: <code>scout</code>, <code>extract</code>, <code>crystallize</code>, <code>audit</code>, <code>clean</code>, <code>all</code>, <code>daily</code>.</div>
+      <span class="cmd-tag">scan</span>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">improve-arch</div>
+      <div class="cmd-desc">Analyze <code>src/</code> for deepening opportunities (delegates to <code>/improve-codebase-architecture</code>).</div>
+      <span class="cmd-tag">scan</span>
+    </div>
+  </div>
+</section>
+
+<!-- Walkthrough -->
+<section id="walkthrough">
+  <div class="section-label reveal">Hands-on</div>
+  <h2 class="section-title reveal">Step-by-Step Walkthrough</h2>
+  <p class="section-sub reveal">Follow along to create and manage an ARA research project from scratch.</p>
+
+  <div class="steps reveal">
+    <div class="step">
+      <h4>Initialize the Project</h4>
+      <p>Create a new ARA project with a title, domain, and keywords. This scaffolds the full directory tree and seed files.</p>
+      <div class="terminal">
+        <div class="terminal-header">
+          <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
+          <span class="terminal-label">Terminal</span>
+        </div>
+        <div class="terminal-body">
+          <span class="prompt">$</span> <span class="cmd">/ara-manager init "Protein-Ligand Binding with GNNs" \</span><br>
+          <span class="prompt">&nbsp;</span> <span class="cmd">--domain "computational chemistry" \</span><br>
+          <span class="prompt">&nbsp;</span> <span class="cmd">--keywords gnns,drug-discovery,binding-affinity</span><br>
+          <span class="output">[ara-manager] Initialized ARA project at ./ara/.</span><br>
+          <span class="output">  Files: 13</span><br>
+          <span class="output">  Next: /ara-manager add-claim "..." or /ara-manager log decision "..."</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <h4>Check Project Status</h4>
+      <p>Get a compact dashboard showing claim counts, staged observations, exploration nodes, and the last session.</p>
+      <div class="terminal">
+        <div class="terminal-header">
+          <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
+          <span class="terminal-label">Terminal</span>
+        </div>
+        <div class="terminal-body">
+          <span class="prompt">$</span> <span class="cmd">/ara-manager status</span><br>
+          <span class="output">ARA Project: Protein-Ligand Binding with GNNs</span><br>
+          <span class="output">Domain:      computational chemistry</span><br>
+          <span class="output">Location:    ./ara/</span><br>
+          <span class="output">Claims (0 total): (none)</span><br>
+          <span class="output">Staged observations: 0</span><br>
+          <span class="output">Exploration nodes:   0</span><br>
+          <span class="output">Last session:        (none)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <h4>Log a Research Decision</h4>
+      <p>Record a decision directly to the exploration tree (append-only). The provenance defaults to <code>user</code> when quoted.</p>
+      <div class="terminal">
+        <div class="terminal-header">
+          <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
+          <span class="terminal-label">Terminal</span>
+        </div>
+        <div class="terminal-body">
+          <span class="prompt">$</span> <span class="cmd">/ara-manager log decision "Chose AdamW over SGD for optimizer" \</span><br>
+          <span class="prompt">&nbsp;</span> <span class="cmd">--alternatives "SGD,RMSProp" --evidence "C01"</span><br>
+          <span class="output">[ara-manager] Logged N01 (decision) — "Chose AdamW over SGD"</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <h4>Stage a Falsifiable Claim</h4>
+      <p>All observations start in the staging buffer. Claims are validated for falsifiability — warnings appear but don&rsquo;t block.</p>
+      <div class="terminal">
+        <div class="terminal-header">
+          <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
+          <span class="terminal-label">Terminal</span>
+        </div>
+        <div class="terminal-body">
+          <span class="prompt">$</span> <span class="cmd">/ara-manager add-claim \</span><br>
+          <span class="prompt">&nbsp;</span> <span class="cmd">"Our GNN achieves &gt;0.85 ROC-AUC on ChEMBL binding-affinity benchmark" \</span><br>
+          <span class="prompt">&nbsp;</span> <span class="cmd">--tags gnns,chembl,perf</span><br>
+          <span class="output">[ara-manager] Staged O01 (claim) — pending crystallization</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <h4>Log an Experiment</h4>
+      <p>Record experimental results. The agent derives <code>result</code> and <code>hypothesis</code> fields from your description.</p>
+      <div class="terminal">
+        <div class="terminal-header">
+          <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
+          <span class="terminal-label">Terminal</span>
+        </div>
+        <div class="terminal-body">
+          <span class="prompt">$</span> <span class="cmd">/ara-manager log experiment \</span><br>
+          <span class="prompt">&nbsp;</span> <span class="cmd">"Trained 3-layer GNN on ChEMBL — 0.87 ROC-AUC, 0.52 RMSD"</span><br>
+          <span class="output">[ara-manager] Logged N02 (experiment) — "3-layer GNN on ChEMBL"</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <h4>Crystallize the Claim</h4>
+      <p>When evidence arrives, promote the staged observation with a <strong>closure signal</strong>. Here, the experiment resolved in its favor.</p>
+      <div class="terminal">
+        <div class="terminal-header">
+          <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
+          <span class="terminal-label">Terminal</span>
+        </div>
+        <div class="terminal-body">
+          <span class="prompt">$</span> <span class="cmd">/ara-manager crystallize O01 --via resolution</span><br>
+          <span class="output">[ara-manager] Crystallized O01 &rarr; C01 (claim) in logic/claims.md via resolution</span><br>
+          <span class="comment"># The observation is marked promoted:true but NOT deleted.</span><br>
+          <span class="comment"># The staging trail is part of the permanent record.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <h4>Advance the Claim</h4>
+      <p>Update the claim&rsquo;s status from <code>hypothesis</code> to <code>supported</code> now that experimental evidence confirms it.</p>
+      <div class="terminal">
+        <div class="terminal-header">
+          <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
+          <span class="terminal-label">Terminal</span>
+        </div>
+        <div class="terminal-body">
+          <span class="prompt">$</span> <span class="cmd">/ara-manager advance-claim C01 supported --note "N02 confirms: 0.87 ROC-AUC &gt; 0.85 threshold"</span><br>
+          <span class="output">[ara-manager] Advanced C01: hypothesis &rarr; supported</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <h4>Run Validation</h4>
+      <p>Seal Level 1 checks all 17 structural constraints — file presence, cross-layer references, provenance, tree hygiene, and self-consistency.</p>
+      <div class="terminal">
+        <div class="terminal-header">
+          <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
+          <span class="terminal-label">Terminal</span>
+        </div>
+        <div class="terminal-body">
+          <span class="prompt">$</span> <span class="cmd">/ara-manager validate</span><br>
+          <span class="output">[validate] Seal Level 1: PASS (17/17 checks)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <h4>Organize Daily Maintenance</h4>
+      <p>The multi-agent maintenance loop handles scouting, extraction, review, execution, and verification automatically.</p>
+      <div class="terminal">
+        <div class="terminal-header">
+          <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
+          <span class="terminal-label">Terminal</span>
+        </div>
+        <div class="terminal-body">
+          <span class="prompt">$</span> <span class="cmd">/ara-manager organize daily</span><br>
+          <span class="output">[ara-manager] organize daily — running L1 maintenance.</span><br>
+          <span class="output">Report will be written to ara/daily/2026-06-26.md.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Best Practices -->
+<section id="best-practices">
+  <div class="section-label reveal">Guidelines</div>
+  <h2 class="section-title reveal">Best Practices</h2>
+  <p class="section-sub reveal">These rules ensure your ARA project remains coherent, traceable, and machine-readable.</p>
+
+  <div class="practices-grid reveal">
+    <div class="practice-card">
+      <div class="icon">&#9312;</div>
+      <h4>Stage Before Crystallizing</h4>
+      <p>Always add observations to the staging buffer first. Crystallize only when a closure signal fires. This preserves the evidence trail and prevents premature commitment.</p>
+      <div class="example">
+        <span class="comment">// Preferred flow:</span><br>
+        <span class="good">/ara-manager add-claim "GNN achieves &gt;0.85 AUC"</span><br>
+        <span class="good">/ara-manager crystallize O01 --via affirmation</span>
+      </div>
+    </div>
+
+    <div class="practice-card">
+      <div class="icon">&#9313;</div>
+      <h4>Write Falsifiable Claims</h4>
+      <p>A good claim names a measurable outcome with a scope qualifier. Vague claims can&rsquo;t be tested or refuted.</p>
+      <div class="example">
+        <span class="good">&#10003; "Model achieves &gt;90% accuracy on dataset X"</span><br>
+        <span class="bad">&#10007; "The model works well"</span><br>
+        <span class="bad">&#10007; "We should try a different approach"</span>
+      </div>
+    </div>
+
+    <div class="practice-card">
+      <div class="icon">&#9314;</div>
+      <h4>Honor Layer Mutability</h4>
+      <p><code>logic/</code> is mutable — edit in place. <code>trace/</code>, <code>staging/</code>, and <code>evidence/</code> are append-only — never delete or rewrite prior entries. This separation preserves the journey record.</p>
+      <div class="example">
+        <span class="good">&#10003; Append to staging/observations.yaml</span><br>
+        <span class="bad">&#10007; Delete a staged observation</span>
+      </div>
+    </div>
+
+    <div class="practice-card">
+      <div class="icon">&#9315;</div>
+      <h4>One-Step Transitions</h4>
+      <p>Advance claims incrementally: <code>hypothesis &rarr; testing &rarr; supported</code>. Jumping from <code>hypothesis</code> directly to <code>supported</code> requires both experimental results and explicit affirmation.</p>
+      <div class="example">
+        <span class="good">&#10003; hypothesis &rarr; testing &rarr; supported</span><br>
+        <span class="bad">&#10007; hypothesis &rarr; supported (no evidence)</span>
+      </div>
+    </div>
+
+    <div class="practice-card">
+      <div class="icon">&#9316;</div>
+      <h4>Never Invent IDs</h4>
+      <p>Always read the target file first to find the highest existing ID, then increment. Guessing IDs creates duplicates and breaks cross-layer references.</p>
+      <div class="example">
+        <span class="good">&#10003; Read highest C{XX}, allocate C{XX+1}</span><br>
+        <span class="bad">&#10007; Guess C02 without reading claims.md</span>
+      </div>
+    </div>
+
+    <div class="practice-card">
+      <div class="icon">&#9317;</div>
+      <h4>Default to Non-Promotion</h4>
+      <p>Crystallization is the exception, not the default. An observation stays staged until a clear closure signal fires. When in doubt, keep it staged.</p>
+      <div class="example">
+        <span class="good">&#10003; "Let me check the results first" = keep staged</span><br>
+        <span class="good">&#10003; "I confirmed this works" = crystallize via affirmation</span>
+      </div>
+    </div>
+
+    <div class="practice-card">
+      <div class="icon">&#9318;</div>
+      <h4>Cross-Layer Consistency</h4>
+      <p>After every write, verify that cross-layer bindings stay valid. Claim <code>Proof:</code> fields must reference real experiment IDs; <code>PAPER.md claims_summary</code> must match the claim count.</p>
+      <div class="example">
+        <span class="good">&#10003; C01 Proof: [E05] — E05 exists in experiments.md</span><br>
+        <span class="bad">&#10007; C01 Proof: [E99] — E99 doesn't exist</span>
+      </div>
+    </div>
+
+    <div class="practice-card">
+      <div class="icon">&#9319;</div>
+      <h4>Provenance is Conservative</h4>
+      <p>Default to <code>ai-suggested</code> when uncertain. Never upgrade to <code>user-revised</code> without an explicit user revision this turn. The provenance track is your trust anchor.</p>
+      <div class="example">
+        <span class="good">&#10003; Default: ai-suggested (safe)</span><br>
+        <span class="good">&#10003; User said "yes, that's right" = user</span><br>
+        <span class="bad">&#10007; Assume user-revised without evidence</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Provenance -->
+<section id="provenance">
+  <div class="section-label reveal">Trust</div>
+  <h2 class="section-title reveal">Provenance &amp; Claim Transitions</h2>
+  <p class="section-sub reveal">The ARA standard defines four provenance levels and a strict state machine for claim statuses.</p>
+
+  <div class="reveal" style="margin-bottom:32px;">
+    <h3 style="font-family:var(--font-display);font-size:1.1rem;font-weight:600;margin-bottom:12px;">Provenance Values</h3>
+    <table class="prov-table">
+      <thead>
+        <tr><th>Value</th><th>Use When</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>user</td><td>The user made the statement in first person or quoted verbatim. Highest trust.</td></tr>
+        <tr><td>ai-suggested</td><td>The AI proposed it; the user hasn&rsquo;t yet confirmed. <strong>Safe default.</strong></td></tr>
+        <tr><td>ai-executed</td><td>The AI performed the action — ran an experiment, executed a query, generated a result.</td></tr>
+        <tr><td>user-revised</td><td>The AI proposed something, the user edited it. Hybrid provenance — never inferred automatically.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="reveal">
+    <h3 style="font-family:var(--font-display);font-size:1.1rem;font-weight:600;margin-bottom:12px;">Allowed Claim Status Transitions</h3>
+    <div class="transition-diagram">
+      <span class="state initial">hypothesis</span>
+      <span class="arrow-state">&rarr;</span>
+      <span class="state">testing</span>
+      <span class="arrow-state">&rarr;</span>
+      <span class="state settled">supported</span>
+      <span class="arrow-state" style="margin:0 4px;">&#8593;</span>
+      <span class="state">weakened</span>
+      <span class="arrow-state" style="margin:0 8px;">&#124;</span>
+      <span class="state terminal">refuted</span>
+      <span class="arrow-state" style="margin:0 8px;">&#124;</span>
+      <span class="state terminal">withdrawn</span>
+      <span class="arrow-state" style="margin:0 8px;">&#124;</span>
+      <span class="state marker">revised</span>
+    </div>
+    <p style="font-size:13px;color:var(--text-muted);text-align:center;margin-top:12px;">
+      <code>revised</code> is a transition marker &mdash; must settle to <code>testing</code> or <code>hypothesis</code> next.<br>
+      Terminal states (<code>refuted</code>, <code>withdrawn</code>) can only revive through <code>revised</code>.
+    </p>
+  </div>
+</section>
+
+<!-- Ecosystem -->
+<section id="ecosystem">
+  <div class="section-label reveal">Ecosystem</div>
+  <h2 class="section-title reveal">The ARA Skill Family</h2>
+  <p class="section-sub reveal">ARA Manager is one of five companion skills that together form a complete research knowledge management system.</p>
+
+  <div class="ecosystem-grid reveal">
+    <div class="eco-card featured">
+      <div class="eco-name">/ara-manager</div>
+      <div class="eco-desc"><strong>On-demand project operations</strong> &mdash; add claims, log events, check status, run validation. The command hub you&rsquo;re learning here.</div>
+    </div>
+    <div class="eco-card">
+      <div class="eco-name">/compiler</div>
+      <div class="eco-desc">One-shot ARA construction from papers, code repos, logs, and notes. Runs the full 4-stage epistemic protocol.</div>
+    </div>
+    <div class="eco-card">
+      <div class="eco-name">/research-manager</div>
+      <div class="eco-desc">Per-turn epilogue that records research events with correct provenance. Runs as a background process during active research.</div>
+    </div>
+    <div class="eco-card">
+      <div class="eco-name">/rigor-reviewer</div>
+      <div class="eco-desc">Seal Level 2 deep epistemic review across six dimensions: evidence relevance, falsifiability, scope calibration, argument coherence, exploration integrity, methodological rigor.</div>
+    </div>
+    <div class="eco-card">
+      <div class="eco-name">/improve-codebase-architecture</div>
+      <div class="eco-desc">Analyzes <code>src/</code> for deepening opportunities — surface shallow modules, find missing seams, propose refactors.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <p>
+    <a href="https://github.com/Orchestra-Research/Agent-Native-Research-Artifact" target="_blank">ARA Standard</a>
+    &nbsp;&middot;&nbsp;
+    <a href="https://arxiv.org/abs/2604.24658" target="_blank">arXiv:2604.24658</a>
+    &nbsp;&middot;&nbsp;
+    <a href="LICENSE">MIT License</a>
+  </p>
+  <p style="margin-top:8px;">ARA Project Manager &mdash; part of the ARA Commons open-source ecosystem.</p>
+</footer>
+
+</div><!-- /wrapper -->
+
+<script>
+// ── Side Nav ────────────────────────────────────────────────────
+function toggleNav() {
+  document.getElementById('sideNav').classList.toggle('open');
+}
+
+// Close nav on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('sideNav').classList.remove('open');
+});
+
+// ── Scroll Reveal ────────────────────────────────────────────────
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      revealObserver.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+// ── Terminal hover interaction ──────────────────────────────────
+document.querySelectorAll('.terminal').forEach(term => {
+  term.addEventListener('click', () => {
+    const body = term.querySelector('.terminal-body');
+    if (body) {
+      const text = body.textContent.trim();
+      navigator.clipboard?.writeText(text).catch(() => {});
+    }
+  });
+});
+</script>
+</body>
+</html>
