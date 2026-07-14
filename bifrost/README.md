@@ -1,6 +1,6 @@
 # Bifrost
 
-**v0.2.1**. Security-hardened release. Not for production use.
+**v0.2.2**. Security-hardened release. Not for production use.
 
 An OpenCode plugin and Python FastMCP companion that bridges agent capabilities: persistent memory, tool call classification, goal-oriented agent loops, skill bridging, permission auditing, and multi-model synthesis.
 
@@ -40,6 +40,14 @@ Read-only migration from other coding agent config files to OpenCode format. Map
 
 ### 7. Model Fusion *(EXPERIMENTAL)*
 **Labeled EXPERIMENTAL in all output.** Dispatch a single prompt to up to 3 models in parallel, then synthesize a unified answer from their responses. Includes per-model cost tracking, timeout resilience (partial failures don't block the fusion), and a configurable cost ceiling. The synthesis model is instructed to identify strong claims, resolve contradictions, and weight weaker responses less.
+
+**v0.2.2+** The fusion skill is auto-installed to `~/.claude/skills/fusion/SKILL.md` when the plugin loads — making `/fusion` available as a global slash command in every OpenCode session, no project-level `.agents/skills/` file needed. Uses a FAST dispatch path via `opencode run --session` with preloaded sessions for ~3-5s response times.
+
+### 8. Cost Tracking
+Per-session cost summary via `session_cost_summary` MCP tool. Track token usage and dollar amounts across sessions.
+
+### 9. Tokenizer Utility
+Accurate token counting via `count_tokens` MCP tool, backed by `tiktoken`. Useful for prompt budget management before dispatching to models.
 
 ---
 
@@ -187,38 +195,40 @@ cost_ceiling_default: 2.00
 ## 6. Architecture
 
 ```
-┌──────────┐     ┌──────────────────────────────┐     ┌──────────────────────────────┐
-│          │     │  Plugin (TypeScript)          │     │  Companion (Python FastMCP)  │
-│  User    │────▶│  bifrost/plugin/              │────▶│  bifrost/companion/           │
-│          │     │                               │     │                               │
-│  "Fix    │     │  index.ts                     │ MCP │  server.py  ─── config.py     │
-│   this"  │     │   ├─ hooks (lifecycle)         │stdio│   ├─ memory/   (SQLite+      │
-│          │     │   ├─ classifier pre-filter     │────▶│   │              FTS5)        │
-│          │     │   ├─ permission.ask handler    │     │   ├─ classifier/              │
-│          │     │   ├─ mcp-relay.ts             │     │   ├─ goal/                    │
-│          │     │   ├─ /goal command             │     │   ├─ fusion/                  │
-│          │     │   ├─ /fusion command           │     │   ├─ skill/   (loader)        │
-│          │     │   └─ /audit-permissions        │     │   ├─ permission/ (migrate)    │
-│          │     │                               │     │   ├─ context/                 │
-│          │     │  STDIO → server.py             │     │   └─ db.py    (connection)    │
-│          │     │                               │     │                               │
-│          │     │  MCP relay calls:              │     │  SQLite storage:              │
-│          │     │   memory_*                     │     │   ~/.bifrost/bifrost.db       │
-│          │     │   classify_tool_call           │     │   ├─ memories                 │
-│          │     │   goal_loop                    │     │   ├─ memories_fts (FTS)       │
-│          │     │   fusion_dispatch_tool         │     │   ├─ classifier_feedback      │
-│          │     │   config_migrate               │     │   ├─ learned_rules            │
-│          │     │   skill_load / skill_list      │     │   └─ config                   │
-│          │     │   log_override                 │     │                               │
-└──────────┘     └──────────────────────────────┘     └──────────────────────────────┘
+┌──────────┐     ┌──────────────────────────────────┐     ┌──────────────────────────────┐
+│          │     │  Plugin (TypeScript)              │     │  Companion (Python FastMCP)  │
+│  User    │────▶│  bifrost/plugin/                  │────▶│  bifrost/companion/           │
+│          │     │                                   │     │                               │
+│  "Fix    │     │  index.ts                         │ MCP │  server.py  ─── config.py     │
+│   this"  │     │   ├─ lifetime hooks                │stdio│   ├─ memory/    (SQLite+     │
+│          │     │   ├─ global fusion skill installer │────▶│   │              FTS5)        │
+│          │     │   ├─ classifier pre-filter         │     │   ├─ classifier/              │
+│          │     │   ├─ mcp-relay.ts                 │     │   ├─ goal/                    │
+│          │     │   ├─ logger.ts (~/.bifrost/logs/)  │     │   ├─ cost/     (tracker)      │
+│          │     │   ├─ slash commands                │     │   ├─ skill/   (loader)        │
+│          │     │   └─ tool registrations            │     │   ├─ utils/   (tokenizer)     │
+│          │     │                                   │     │   ├─ permission/ (migrate)    │
+│          │     │  STDIO → server.py                 │     │   ├─ context/                 │
+│          │     │                                   │     │   └─ db.py    (connection)    │
+│          │     │  MCP relay calls:                  │     │                               │
+│          │     │   memory_*                         │     │  SQLite storage:              │
+│          │     │   classify_tool_call               │     │   ~/.bifrost/bifrost.db       │
+│          │     │   goal_loop                        │     │   ├─ memories                 │
+│          │     │   fusion_dispatch_tool             │     │   ├─ memories_fts (FTS)       │
+│          │     │   config_migrate / project         │     │   ├─ classifier_feedback      │
+│          │     │   skill_load / skill_list          │     │   ├─ learned_rules            │
+│          │     │   log_override                     │     │   └─ config                   │
+│          │     │   session_cost_summary             │     │                               │
+│          │     │   count_tokens                     │     │   Logs: ~/.bifrost/logs/      │
+└──────────┘     └──────────────────────────────────┘     └──────────────────────────────┘
 ```
 
 ### Component roles
 
 | Component | Language | Role |
-|---|---|---|
-| **Plugin** (`plugin/`) | TypeScript | Hooks into OpenCode lifecycle. Pre-filters known-safe tools locally to avoid unnecessary MCP round-trips. Relays classification, goals, fusion, and audit requests to the companion. Registers `/goal`, `/fusion`, `/audit-permissions`, `/review`, `/explain`, `/commit`, and `/test` slash commands. Includes circuit breaker for MCP relay resilience. |
-| **Companion** (`companion/`) | Python (FastMCP) | Long-lived server process. Owns all state (SQLite), all model dispatch, skill parsing, and configuration. Exposes 12 MCP tools over stdio. Never modifies source files. |
+|---|---|---|---|
+| **Plugin** (`plugin/`) | TypeScript | Hooks into OpenCode lifecycle. Pre-filters known-safe tools locally to avoid unnecessary MCP round-trips. Relays classification, goals, fusion, and audit requests to the companion. Registers `/goal`, `/fusion`, `/audit-permissions`, `/review`, `/explain`, `/commit`, and `/test` slash commands. Includes circuit breaker for MCP relay resilience. Logs to `~/.bifrost/logs/plugin.log` via file-based logger. |
+| **Companion** (`companion/`) | Python (FastMCP) | Long-lived server process. Owns all state (SQLite), all model dispatch, skill parsing, and configuration. Exposes 15+ MCP tools over stdio. Never modifies source files. |
 | **SQLite** (`~/.bifrost/bifrost.db`) | Data | Persistent storage for memories, classifier feedback, learned rules, and configuration. Uses WAL journal mode for concurrent access. Full-text search via FTS5 virtual table. |
 
 ### Data flow: tool call classification
@@ -234,17 +244,26 @@ Agent calls tool
     → User override? → log_override(…) → learned_rules
 ```
 
-### Data flow: slash command
+### Data flow: slash command (two paths)
 
 ```
-User types /fusion "Is Rust faster than Go?"
-  → Plugin intercepts (command.execute.before hook)
-    → Parse args, validate
-    → Relay to companion: fusion_dispatch_tool(prompt, …)
-      → Dispatch to up to 3 models in parallel
-      → Synthesize fused answer
-      → Return result with per-model costs
-    → Plugin formats output with EXPERIMENTAL banner
+User types /fusion "prompt"
+  → Plugin auto-installed global skill at ~/.claude/skills/fusion/SKILL.md
+  → Auto-slash-command loads skill → agent executes
+
+  FAST path (preloaded sessions):
+    bash(opencode run --session ses_FLASH --model ...)  ─→ ~3s
+    bash(opencode run --session ses_PRO  --model ...)  ─→ ~3s
+    ↓
+    All responses collected → synthesize (or skip via --fast)
+
+  FRESH path (first use or --reset):
+    task(category=quick, run_in_background=true)       ─→ ~50s
+    task(category=unspecified-high, run_in_background=true) ─→ ~50s
+    ↓
+    Sessions cached → next call uses FAST path
+
+  Output: EXPERIMENTAL — Model Fusion banner + per-model table + fused answer
 ```
 
 ---
@@ -306,7 +325,7 @@ The companion exposes these MCP tools over stdio. They are intended for the plug
 
 | Tool | Category |
 |---|---|
-| `version` | Returns `"bifrost v0.2.1"` |
+| `version` | Returns `"bifrost v0.2.2"` |
 | `echo` | Echoes a message back (health check) |
 | `memory_save`, `memory_search`, `memory_list`, `memory_delete` | Persistent memory |
 | `classify_tool_call` | Tool call classification |
@@ -327,7 +346,7 @@ Bifrost discovers skills from three search paths (project-level `.agents/skills/
 
 ### Compatibility
 
-Not all workspace skills are compatible with Bifrost's skill bridge. A compatibility matrix is maintained at [`SKILL_COMPAT.md`](SKILL_COMPAT.md). As of v0.2.1:
+Not all workspace skills are compatible with Bifrost's skill bridge. A compatibility matrix is maintained at [`SKILL_COMPAT.md`](SKILL_COMPAT.md). As of v0.2.2:
 
 - **9 skills** are **verified**: manually audited for zero shell exec, valid frontmatter, no dangerous patterns, and compatible argument substitution
 - **74 skills** are **best-effort**: exist in the workspace but have not been verified
@@ -357,7 +376,7 @@ Skills with verified compatibility can be loaded and their instructions injected
 
 **No distributed memory.** The SQLite database lives at `~/.bifrost/bifrost.db` on a single machine. There is no sync, replication, or shared memory across team members.
 
-**Alpha software.** This is v0.2.1. APIs, MCP tool signatures, and config formats may change between releases. There is no migration path for breaking changes yet. The companion may crash on unexpected inputs. Do not run in production.
+**Alpha software.** This is v0.2.2. APIs, MCP tool signatures, and config formats may change between releases. There is no migration path for breaking changes yet. The companion may crash on unexpected inputs. Do not run in production.
 
 ---
 
@@ -380,10 +399,10 @@ Bifrost welcomes contributions. Before submitting, please:
 
 ### Areas that need help
 
-- Real model dispatch for fusion (currently uses mock responses — the dispatch infrastructure is in place but model API calls return synthetic data)
 - Live pricing API integration for cost tracking
 - Goal loop with actual agent execution (beyond simulation)
-- Skill compatibility verification for the 74 best-effort skills
+- Skill compatibility verification for best-effort skills
+- Fusion skill: per-model variant configuration, Minimax M3 provider support
 - Comprehensive test coverage for the companion
 
 ---
