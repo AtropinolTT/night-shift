@@ -9,6 +9,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONFIG_DIR="$($SCRIPT_DIR/config-dir.sh)"
+
 MODE="all"
 TARGET=""
 
@@ -25,7 +28,7 @@ done
 # Checks if state.json's day differs from current Beijing date.
 # If so, resets spent_today to 0 for the new day.
 reset_midnight_budget() {
-  local state_file="$HOME/.claude/night-shift/state.json"
+  local state_file="$CONFIG_DIR/state.json"
   local today
   today=$(TZ='Asia/Shanghai' date +%Y-%m-%d)
 
@@ -210,24 +213,19 @@ print(json.dumps(jobs, indent=2, ensure_ascii=False))
 PYEOF
 }
 
-# --- Discover project queue files ---
+# --- Discover project queue files across all tools ---
 find_queues() {
   local queues=()
+  local CONFIG_FILE="$CONFIG_DIR/config.json"
 
-  # Scan ~/.claude/projects/
-  if [[ -d "$HOME/.claude/projects" ]]; then
-    while IFS= read -r q; do
-      if [[ -f "$q" ]]; then queues+=("$q"); fi
-    done < <(find "$HOME/.claude/projects" -maxdepth 2 -name 'NIGHTSHIFT.md' 2>/dev/null || true)
-  fi
-
-  # Scan explicit paths from config
-  if [[ -f "$HOME/.claude/night-shift/config.json" ]]; then
+  # Source 1: Explicit paths from config.json
+  if [[ -f "$CONFIG_FILE" ]]; then
+    export NS_CONFIG_FILE="$CONFIG_FILE"
     local extra
     extra=$(python3 -c "
 import json, os
 try:
-    with open(os.path.expanduser('$HOME/.claude/night-shift/config.json')) as f:
+    with open(os.environ['NS_CONFIG_FILE']) as f:
         cfg = json.load(f)
     for p in cfg.get('projects',{}).get('paths',[]):
         q = os.path.join(os.path.expanduser(p), 'NIGHTSHIFT.md')
@@ -242,7 +240,49 @@ except: pass
     fi
   fi
 
-  # Dedup by realpath (handles symlinked projects)
+  # Source 2: Claude Code projects directory
+  if [[ -d "$HOME/.claude/projects" ]]; then
+    while IFS= read -r q; do
+      if [[ -f "$q" ]]; then queues+=("$q"); fi
+    done < <(find "$HOME/.claude/projects" -maxdepth 2 -name 'NIGHTSHIFT.md' 2>/dev/null || true)
+  fi
+
+  # Source 3: Codex CLI projects (each subdirectory)
+  if [[ -d "$HOME/.codex" ]]; then
+    while IFS= read -r q; do
+      if [[ -f "$q" ]]; then queues+=("$q"); fi
+    done < <(find "$HOME/.codex" -maxdepth 2 -name 'NIGHTSHIFT.md' 2>/dev/null || true)
+  fi
+
+  # Source 4: QoderCLI project siblings via CWD walk
+  local probe="$PWD"
+  while [[ "$probe" != "/" ]]; do
+    if [[ -f "$probe/NIGHTSHIFT.md" ]]; then
+      queues+=("$probe/NIGHTSHIFT.md")
+    fi
+    probe="$(dirname "$probe")"
+  done
+
+  # Source 5: QODER_PROJECT_DIR siblings
+  if [[ -n "${QODER_PROJECT_DIR:-}" && -d "$QODER_PROJECT_DIR" ]]; then
+    local parent
+    parent="$(dirname "$QODER_PROJECT_DIR")"
+    while IFS= read -r candidate; do
+      local nf="$candidate/NIGHTSHIFT.md"
+      if [[ -f "$nf" ]]; then
+        # Avoid duplicates with Source 4
+        local already=false
+        for q in "${queues[@]}"; do
+          if [[ "$(realpath "$q" 2>/dev/null)" == "$(realpath "$nf" 2>/dev/null)" ]]; then
+            already=true; break
+          fi
+        done
+        ! $already && queues+=("$nf")
+      fi
+    done < <(find "$parent" -maxdepth 1 -type d 2>/dev/null || true)
+  fi
+
+  # Dedup by realpath
   if [[ ${#queues[@]} -gt 1 ]]; then
     local seen_paths=()
     local deduped=()
@@ -283,9 +323,8 @@ case "$MODE" in
     # Step 1: Discover and parse all queues
     QUEUES=($(find_queues))
     echo -n '{"last_scan":"'"$(TZ='Asia/Shanghai' date -Iseconds)"'","projects":{'
-    local FIRST=true
+    FIRST=true
     for q in "${QUEUES[@]}"; do
-      local PROJ
       PROJ=$(basename "$(dirname "$(realpath "$q")")")
       if $FIRST; then FIRST=false; else echo -n ','; fi
       echo -n '"'"$PROJ"'":'
